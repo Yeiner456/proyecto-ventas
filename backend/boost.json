@@ -1,6 +1,6 @@
 {
     "agents": [
-        "claude_code"
+        "amp"
     ],
     "cloud": true,
     "mcp": true,
