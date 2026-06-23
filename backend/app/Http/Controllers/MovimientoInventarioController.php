@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\FiltraPorSucursal;
-use App\Http\Controllers\Controller;
 use App\Models\MovimientoInventario;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

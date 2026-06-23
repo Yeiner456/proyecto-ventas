@@ -16,10 +16,11 @@ use Illuminate\Database\Eloquent\Builder;
  *
  *  2) Auditoría: registro de quién hizo qué, útil para trazabilidad.
  *
- * IMPORTANTE: este trait asume que ya tienes auth configurado (Sanctum)
- * y que el modelo Usuario es el "auth user". Mientras no tengas login
- * armado, auth()->user() devolverá null y los métodos de abajo lo
- * manejan sin romper (ver comentarios en cada método).
+ * Con el middleware 'auth:sanctum' activo en routes/api.php, auth()->user()
+ * devuelve el Usuario real autenticado por su token, y el filtro
+ * multi-tenant de abajo aplica de verdad. El caso "$user es null" se
+ * mantiene como salvaguarda defensiva (ej: una ruta que por error quede
+ * sin el middleware), no como comportamiento esperado.
  */
 trait FiltraPorSucursal
 {

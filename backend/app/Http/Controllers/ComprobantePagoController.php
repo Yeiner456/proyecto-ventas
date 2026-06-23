@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\FiltraPorSucursal;
-use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreComprobantePagoRequest;
 use App\Models\ComprobantePago;
 use App\Models\Venta;

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreMetodoPagoRequest;
 use App\Http\Requests\UpdateMetodoPagoRequest;
 use App\Models\MetodoPago;

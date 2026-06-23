@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\FiltraPorSucursal;
-use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCategoriaProductoRequest;
 use App\Http\Requests\UpdateCategoriaProductoRequest;
 use App\Models\CategoriaProducto;

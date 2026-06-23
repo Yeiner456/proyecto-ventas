@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuditoriaLogController;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoriaProductoController;
 use App\Http\Controllers\ComprobantePagoController;
 use App\Http\Controllers\DetalleVentaController;
@@ -21,14 +22,25 @@ use Illuminate\Support\Facades\Route;
 | API Routes
 |--------------------------------------------------------------------------
 |
-| Mientras conectas Sanctum, estas rutas funcionan sin auth (auth()->user()
-| devuelve null y los controladores no filtran por sucursal). En cuanto
-| agregues el middleware 'auth:sanctum' aquí abajo, el filtro multi-tenant
-| se activa solo, sin tocar ningún controlador.
+| /login es pública (es donde se consigue el token). Todo lo demás exige
+| 'auth:sanctum': el cliente debe mandar el header
+| Authorization: Bearer {token} obtenido en el login.
 |
+| En cuanto este middleware está activo, auth()->user() en los
+| controladores deja de ser null, y el filtro multi-tenant por sucursal
+| (FiltraPorSucursal) se activa solo, sin tocar ningún controlador.
 */
 
-Route::middleware([/* 'auth:sanctum' */])->group(function () {
+// --- Pública: login (con límite de intentos para evitar fuerza bruta) ---
+Route::middleware('throttle:6,1')->post('login', [AuthController::class, 'login']);
+
+// --- Protegidas: requieren token válido ---
+Route::middleware('auth:sanctum')->group(function () {
+
+    // Auth: logout y datos del usuario autenticado
+    Route::post('logout', [AuthController::class, 'logout']);
+    Route::post('logout-all', [AuthController::class, 'logoutAll']);
+    Route::get('me', [AuthController::class, 'me']);
 
     // Catálogos globales (no multi-tenant)
     Route::apiResource('roles', RolController::class);
