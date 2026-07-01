@@ -10,10 +10,17 @@ use Illuminate\Http\Request;
 
 /**
  * Catálogo global de métodos de pago (efectivo, tarjeta, transferencia...).
- * No es multi-tenant: aplica igual para todas las sucursales.
+ * No es multi-tenant. Autorización vía MetodoPagoPolicy: solo
+ * admin_general crea/edita/elimina; el resto solo lee (lo necesitan
+ * para cobrar una venta).
  */
 class MetodoPagoController extends Controller
 {
+    public function __construct()
+    {
+        $this->authorizeResource(MetodoPago::class, 'metodo_pago');
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = MetodoPago::query();

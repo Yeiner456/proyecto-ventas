@@ -13,7 +13,12 @@ use Illuminate\Support\Facades\DB;
 
 class ProductoController extends Controller
 {
-    use FiltraPorSucursal;
+    use FiltraPorSucursal; // solo para aplicarFiltroSucursal() y resolverSucursalId()
+
+    public function __construct()
+    {
+        $this->authorizeResource(Producto::class, 'producto');
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -40,6 +45,7 @@ class ProductoController extends Controller
 
     public function store(StoreProductoRequest $request): JsonResponse
     {
+        // Autorización de 'create' ya resuelta por authorizeResource().
         $datos = $request->validated();
         $datos['sucursal_id'] = $this->resolverSucursalId($datos['sucursal_id'] ?? null);
         $stockInicial = $datos['stock_inicial'] ?? 0;
@@ -48,9 +54,6 @@ class ProductoController extends Controller
         $producto = DB::transaction(function () use ($datos, $stockInicial) {
             $producto = Producto::create($datos);
 
-            // Si el producto maneja stock, le creamos su registro 1-a-1
-            // de inventario (relación obligatoria en el negocio, aunque
-            // la FK en BD no lo exija).
             if ($producto->maneja_stock) {
                 Inventario::create([
                     'producto_id' => $producto->id_producto,
@@ -66,22 +69,19 @@ class ProductoController extends Controller
 
     public function show(Producto $producto): JsonResponse
     {
-        $this->autorizarAccesoSucursal($producto->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($producto->load(['sucursal', 'categoria', 'inventario']));
     }
 
     public function update(UpdateProductoRequest $request, Producto $producto): JsonResponse
     {
-        $this->autorizarAccesoSucursal($producto->sucursal_id);
-
+        // Autorización de 'update' ya resuelta por authorizeResource().
         $datos = $request->validated();
         $habilitandoStock = ($datos['maneja_stock'] ?? null) === true && !$producto->maneja_stock;
 
         DB::transaction(function () use ($producto, $datos, $habilitandoStock) {
             $producto->update($datos);
 
-            // Si se activó maneja_stock y no tenía inventario, lo creamos en 0
             if ($habilitandoStock && !$producto->inventario) {
                 Inventario::create([
                     'producto_id' => $producto->id_producto,
@@ -95,8 +95,7 @@ class ProductoController extends Controller
 
     public function destroy(Producto $producto): JsonResponse
     {
-        $this->autorizarAccesoSucursal($producto->sucursal_id);
-
+        // Autorización de 'delete' ya resuelta por authorizeResource().
         if ($producto->detalleVentas()->exists()) {
             return response()->json([
                 'message' => 'No se puede eliminar el producto porque tiene ventas registradas. Desactívalo en su lugar.',
@@ -106,14 +105,5 @@ class ProductoController extends Controller
         $producto->delete();
 
         return response()->json(null, 204);
-    }
-
-    protected function autorizarAccesoSucursal(int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }

@@ -10,10 +10,16 @@ use Illuminate\Http\Request;
 
 /**
  * Catálogo de roles del sistema (admin_general, admin_sucursal, cajero, contador).
- * No es multi-tenant: los roles son globales.
+ * No es multi-tenant: los roles son globales. Autorización vía RolPolicy
+ * (solo admin_general puede crear/editar/eliminar).
  */
 class RolController extends Controller
 {
+    public function __construct()
+    {
+        $this->authorizeResource(Rol::class, 'rol');
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = Rol::query();

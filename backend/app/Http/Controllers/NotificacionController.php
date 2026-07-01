@@ -14,7 +14,16 @@ use Illuminate\Http\Request;
  */
 class NotificacionController extends Controller
 {
+    // FiltraPorSucursal se mantiene solo para aplicarFiltroSucursal()
+    // y usuarioActual(). La autorización puntual la resuelve
+    // NotificacionPolicy.
     use FiltraPorSucursal;
+
+    public function __construct()
+    {
+        // La ruta solo expone index/show/destroy (sin store/update).
+        $this->authorizeResource(Notificacion::class, 'notificacion');
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -46,14 +55,17 @@ class NotificacionController extends Controller
 
     public function show(Notificacion $notificacion): JsonResponse
     {
-        $this->autorizarAccesoSucursal($notificacion->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($notificacion);
     }
 
+    /**
+     * Marcar como leída. Usa una ability propia ('marcarLeida') porque
+     * no forma parte del CRUD estándar que cubre authorizeResource().
+     */
     public function marcarLeida(Notificacion $notificacion): JsonResponse
     {
-        $this->autorizarAccesoSucursal($notificacion->sucursal_id);
+        $this->authorize('marcarLeida', $notificacion);
 
         $notificacion->update(['leida' => true]);
 
@@ -62,19 +74,9 @@ class NotificacionController extends Controller
 
     public function destroy(Notificacion $notificacion): JsonResponse
     {
-        $this->autorizarAccesoSucursal($notificacion->sucursal_id);
-
+        // Autorización de 'delete' ya resuelta por authorizeResource().
         $notificacion->delete();
 
         return response()->json(null, 204);
-    }
-
-    protected function autorizarAccesoSucursal(?int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }

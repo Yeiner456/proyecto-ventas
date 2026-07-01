@@ -9,13 +9,23 @@ use Illuminate\Http\Request;
 
 /**
  * Historial de movimientos de inventario. Es de solo LECTURA: los
- * movimientos siempre se generan desde InventarioService (al vender,
- * cancelar o ajustar stock), nunca se crean ni editan a mano vía API,
- * para que el historial sea confiable como bitácora de auditoría.
+ * movimientos siempre se generan desde InventarioService, nunca se
+ * crean ni editan a mano vía API.
  */
 class MovimientoInventarioController extends Controller
 {
+    // FiltraPorSucursal se mantiene solo para esAdminGeneral() y
+    // sucursalIdActual() (usados en el filtro manual de index, ya que
+    // MovimientoInventario no tiene sucursal_id propio). La
+    // autorización puntual la resuelve MovimientoInventarioPolicy.
     use FiltraPorSucursal;
+
+    public function __construct()
+    {
+        // Solo expone index/show en las rutas; authorizeResource no se
+        // dispara para los métodos que no existen.
+        $this->authorizeResource(MovimientoInventario::class, 'movimiento_inventario');
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -50,17 +60,7 @@ class MovimientoInventarioController extends Controller
 
     public function show(MovimientoInventario $movimientoInventario): JsonResponse
     {
-        $this->autorizarAccesoSucursal($movimientoInventario->producto->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($movimientoInventario->load(['producto', 'usuario', 'venta']));
-    }
-
-    protected function autorizarAccesoSucursal(int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }

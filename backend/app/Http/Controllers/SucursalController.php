@@ -9,14 +9,17 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Gestión de sucursales. Esta tabla NO se filtra por sucursal (es la
- * entidad que define los tenants); en un sistema real, solo el rol
- * admin_general debería poder crear/editar/eliminar. Esa autorización
- * la puedes añadir luego con un Policy o un middleware de rol; aquí
- * dejamos el CRUD funcional y listo para conectarle esa capa.
+ * Gestión de sucursales. Autorización vía SucursalPolicy: solo
+ * admin_general puede crear/editar/eliminar; el resto de roles solo
+ * puede listar/ver (lo necesitan para selects, etc.).
  */
 class SucursalController extends Controller
 {
+    public function __construct()
+    {
+        $this->authorizeResource(Sucursal::class, 'sucursal');
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = Sucursal::query();

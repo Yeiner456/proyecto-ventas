@@ -11,7 +11,15 @@ use Illuminate\Http\Request;
 
 class CategoriaProductoController extends Controller
 {
+    // FiltraPorSucursal se mantiene solo para aplicarFiltroSucursal()
+    // (scoping del listado) y resolverSucursalId() (al crear). La
+    // autorización de un recurso puntual la resuelve CategoriaProductoPolicy.
     use FiltraPorSucursal;
+
+    public function __construct()
+    {
+        $this->authorizeResource(CategoriaProducto::class, 'categoria_producto');
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -26,6 +34,7 @@ class CategoriaProductoController extends Controller
 
     public function store(StoreCategoriaProductoRequest $request): JsonResponse
     {
+        // Autorización de 'create' ya resuelta por authorizeResource().
         $datos = $request->validated();
         $datos['sucursal_id'] = $this->resolverSucursalId($datos['sucursal_id'] ?? null);
 
@@ -36,15 +45,13 @@ class CategoriaProductoController extends Controller
 
     public function show(CategoriaProducto $categoriaProducto): JsonResponse
     {
-        $this->autorizarAccesoSucursal($categoriaProducto->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($categoriaProducto->load('sucursal'));
     }
 
     public function update(UpdateCategoriaProductoRequest $request, CategoriaProducto $categoriaProducto): JsonResponse
     {
-        $this->autorizarAccesoSucursal($categoriaProducto->sucursal_id);
-
+        // Autorización de 'update' ya resuelta por authorizeResource().
         $categoriaProducto->update($request->validated());
 
         return response()->json($categoriaProducto->load('sucursal'));
@@ -52,8 +59,7 @@ class CategoriaProductoController extends Controller
 
     public function destroy(CategoriaProducto $categoriaProducto): JsonResponse
     {
-        $this->autorizarAccesoSucursal($categoriaProducto->sucursal_id);
-
+        // Autorización de 'delete' ya resuelta por authorizeResource().
         if ($categoriaProducto->productos()->exists()) {
             return response()->json([
                 'message' => 'No se puede eliminar la categoría porque tiene productos asociados.',
@@ -63,14 +69,5 @@ class CategoriaProductoController extends Controller
         $categoriaProducto->delete();
 
         return response()->json(null, 204);
-    }
-
-    protected function autorizarAccesoSucursal(int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }

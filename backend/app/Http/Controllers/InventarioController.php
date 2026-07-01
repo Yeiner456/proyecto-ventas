@@ -12,16 +12,22 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * El inventario NO se crea ni elimina directamente vía API: nace junto
- * con el Producto (ver ProductoController) y muere junto con él.
- * Aquí solo se consulta y se ajusta (entradas/salidas manuales),
- * siempre dejando rastro en movimientos_inventario.
+ * con el Producto y muere junto con él. Aquí solo se consulta y se
+ * ajusta, siempre dejando rastro en movimientos_inventario.
  */
 class InventarioController extends Controller
 {
+    // FiltraPorSucursal se mantiene solo para esAdminGeneral() (usado
+    // en el filtro manual de index, ya que Inventario no tiene
+    // sucursal_id propio) y registrarAuditoria(). La autorización de
+    // un recurso puntual la resuelve InventarioPolicy.
     use FiltraPorSucursal;
 
     public function __construct(protected InventarioService $inventarioService)
     {
+        // 'inventario' solo expone index/show en las rutas; authorizeResource
+        // simplemente no se dispara para los métodos que no existen (store/update/destroy).
+        $this->authorizeResource(Inventario::class, 'inventario');
     }
 
     public function index(Request $request): JsonResponse
@@ -47,20 +53,17 @@ class InventarioController extends Controller
 
     public function show(Inventario $inventario): JsonResponse
     {
-        $this->autorizarAccesoSucursal($inventario->producto->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($inventario->load('producto.sucursal'));
     }
 
     /**
-     * Ajuste manual de stock (ej: conteo físico, merma, corrección de error).
-     * Usa una ruta dedicada en vez de "update" plano porque toda
-     * modificación de cantidad debe pasar por InventarioService para
-     * que quede registrado el movimiento.
+     * Ajuste manual de stock. Usa una ability propia ('ajustar') porque
+     * no forma parte del CRUD estándar que cubre authorizeResource().
      */
     public function ajustar(AjustarInventarioRequest $request, Inventario $inventario): JsonResponse
     {
-        $this->autorizarAccesoSucursal($inventario->producto->sucursal_id);
+        $this->authorize('ajustar', $inventario);
 
         try {
             $movimiento = $this->inventarioService->ajustar(
@@ -79,14 +82,5 @@ class InventarioController extends Controller
             'inventario' => $inventario->refresh()->load('producto'),
             'movimiento' => $movimiento,
         ]);
-    }
-
-    protected function autorizarAccesoSucursal(int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }

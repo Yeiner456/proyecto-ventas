@@ -11,13 +11,19 @@ use Illuminate\Http\Request;
  * Bitácora de auditoría. Se llena automáticamente desde los demás
  * controladores (ver FiltraPorSucursal::registrarAuditoria). Es de
  * solo LECTURA: nunca se crea, edita ni elimina manualmente vía API.
- *
- * Un admin_sucursal solo ve la auditoría de su propia sucursal; el
- * admin_general ve todo.
  */
 class AuditoriaLogController extends Controller
 {
+    // FiltraPorSucursal se mantiene solo para aplicarFiltroSucursal()
+    // (scoping del listado). La autorización puntual la resuelve
+    // AuditoriaLogPolicy.
     use FiltraPorSucursal;
+
+    public function __construct()
+    {
+        // La ruta solo expone index/show.
+        $this->authorizeResource(AuditoriaLog::class, 'auditoria_log');
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -52,17 +58,7 @@ class AuditoriaLogController extends Controller
 
     public function show(AuditoriaLog $auditoriaLog): JsonResponse
     {
-        $this->autorizarAccesoSucursal($auditoriaLog->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($auditoriaLog->load(['usuario', 'sucursal']));
-    }
-
-    protected function autorizarAccesoSucursal(?int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }

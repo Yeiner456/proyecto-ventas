@@ -8,13 +8,23 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Los detalles de venta se crean junto con la Venta (ver VentaController::store)
- * y no se editan ni eliminan sueltos, para no romper la trazabilidad de
- * inventario y totales. Aquí solo se consultan.
+ * Los detalles de venta se crean junto con la Venta (ver
+ * VentaController::store) y no se editan ni eliminan sueltos. Aquí
+ * solo se consultan.
  */
 class DetalleVentaController extends Controller
 {
+    // FiltraPorSucursal se mantiene solo para esAdminGeneral() y
+    // sucursalIdActual() (usados en el filtro manual de index, ya que
+    // DetalleVenta no tiene sucursal_id propio). La autorización
+    // puntual la resuelve DetalleVentaPolicy.
     use FiltraPorSucursal;
+
+    public function __construct()
+    {
+        // Solo expone index/show en las rutas.
+        $this->authorizeResource(DetalleVenta::class, 'detalle_venta');
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -41,17 +51,7 @@ class DetalleVentaController extends Controller
 
     public function show(DetalleVenta $detalleVenta): JsonResponse
     {
-        $this->autorizarAccesoSucursal($detalleVenta->venta->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($detalleVenta->load(['venta', 'producto']));
-    }
-
-    protected function autorizarAccesoSucursal(int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }

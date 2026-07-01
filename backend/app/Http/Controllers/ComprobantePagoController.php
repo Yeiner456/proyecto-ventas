@@ -11,12 +11,23 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Comprobantes de pago (ej: foto del voucher de transferencia). No tiene
- * update: si subieron el archivo equivocado, se elimina y se sube de nuevo.
+ * Comprobantes de pago (ej: foto del voucher de transferencia). No
+ * tiene update: si subieron el archivo equivocado, se elimina y se
+ * sube de nuevo.
  */
 class ComprobantePagoController extends Controller
 {
+    // FiltraPorSucursal se mantiene solo para esAdminGeneral() y
+    // sucursalIdActual() (usados en el filtro manual de index, ya que
+    // ComprobantePago no tiene sucursal_id propio). La autorización
+    // puntual la resuelve ComprobantePagoPolicy.
     use FiltraPorSucursal;
+
+    public function __construct()
+    {
+        // La ruta solo expone index/store/show/destroy (sin update).
+        $this->authorizeResource(ComprobantePago::class, 'comprobante_pago');
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -39,8 +50,14 @@ class ComprobantePagoController extends Controller
 
     public function store(StoreComprobantePagoRequest $request): JsonResponse
     {
+        // ComprobantePagoPolicy::create() solo valida el rol (cajero o
+        // admin_sucursal); la venta puntual la validamos aquí porque
+        // recién la obtenemos del payload.
         $venta = Venta::findOrFail($request->integer('venta_id'));
-        $this->autorizarAccesoSucursal($venta->sucursal_id);
+
+        if (!$this->esAdminGeneral() && $venta->sucursal_id !== $this->sucursalIdActual()) {
+            abort(403, 'No tienes acceso a recursos de otra sucursal.');
+        }
 
         $archivo = $request->file('archivo');
         $ruta = $archivo->store('comprobantes_pago', 'public');
@@ -57,27 +74,17 @@ class ComprobantePagoController extends Controller
 
     public function show(ComprobantePago $comprobantePago): JsonResponse
     {
-        $this->autorizarAccesoSucursal($comprobantePago->venta->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($comprobantePago->load(['venta', 'subidoPor']));
     }
 
     public function destroy(ComprobantePago $comprobantePago): JsonResponse
     {
-        $this->autorizarAccesoSucursal($comprobantePago->venta->sucursal_id);
-
+        // Autorización de 'delete' ya resuelta por authorizeResource()
+        // (incluye la regla de "un cajero solo borra lo que él subió").
         Storage::disk('public')->delete($comprobantePago->archivo_ruta);
         $comprobantePago->delete();
 
         return response()->json(null, 204);
-    }
-
-    protected function autorizarAccesoSucursal(int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }

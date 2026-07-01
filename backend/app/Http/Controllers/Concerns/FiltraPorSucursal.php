@@ -38,8 +38,9 @@ trait FiltraPorSucursal
      * true si el usuario autenticado es admin_general (sucursal_id NULL)
      * o si todavía no hay autenticación configurada (modo desarrollo).
      *
-     * Cuando conectes Sanctum, simplemente esto empezará a funcionar
-     * de verdad sin tocar nada más.
+     * La regla en sí ("qué es un admin_general") vive en
+     * Usuario::esAdminGeneral() para que sea una única fuente de verdad,
+     * compartida con las Policies (app/Policies/*.php).
      */
     protected function esAdminGeneral(): bool
     {
@@ -50,7 +51,7 @@ trait FiltraPorSucursal
             return true;
         }
 
-        return $user->sucursal_id === null;
+        return $user->esAdminGeneral();
     }
 
     /**

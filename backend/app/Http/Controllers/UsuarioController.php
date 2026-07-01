@@ -12,7 +12,15 @@ use Illuminate\Support\Facades\Hash;
 
 class UsuarioController extends Controller
 {
+    // FiltraPorSucursal se mantiene solo para aplicarFiltroSucursal(),
+    // resolverSucursalId() y registrarAuditoria(). La autorización de
+    // un recurso puntual la resuelve UsuarioPolicy.
     use FiltraPorSucursal;
+
+    public function __construct()
+    {
+        $this->authorizeResource(Usuario::class, 'usuario');
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -35,6 +43,7 @@ class UsuarioController extends Controller
 
     public function store(StoreUsuarioRequest $request): JsonResponse
     {
+        // Autorización de 'create' ya resuelta por authorizeResource().
         $datos = $request->validated();
         $datos['sucursal_id'] = $this->resolverSucursalId($datos['sucursal_id'] ?? null);
         $datos['password_hash'] = Hash::make($datos['password']);
@@ -49,15 +58,13 @@ class UsuarioController extends Controller
 
     public function show(Usuario $usuario): JsonResponse
     {
-        $this->autorizarAccesoSucursal($usuario->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($usuario->load(['sucursal', 'rol']));
     }
 
     public function update(UpdateUsuarioRequest $request, Usuario $usuario): JsonResponse
     {
-        $this->autorizarAccesoSucursal($usuario->sucursal_id);
-
+        // Autorización de 'update' ya resuelta por authorizeResource().
         $datos = $request->validated();
 
         if (array_key_exists('sucursal_id', $datos)) {
@@ -79,8 +86,8 @@ class UsuarioController extends Controller
 
     public function destroy(Usuario $usuario): JsonResponse
     {
-        $this->autorizarAccesoSucursal($usuario->sucursal_id);
-
+        // Autorización de 'delete' ya resuelta por authorizeResource()
+        // (incluye la regla de "no puedes eliminarte a ti mismo").
         if ($usuario->ventas()->exists()) {
             return response()->json([
                 'message' => 'No se puede eliminar el usuario porque tiene ventas registradas. Desactívalo en su lugar.',
@@ -92,18 +99,5 @@ class UsuarioController extends Controller
         $this->registrarAuditoria('eliminar_usuario', 'usuarios', $usuario->id_usuario);
 
         return response()->json(null, 204);
-    }
-
-    /**
-     * Aborta con 403 si el usuario autenticado no tiene permiso de
-     * acceder a un recurso de otra sucursal.
-     */
-    protected function autorizarAccesoSucursal(?int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }

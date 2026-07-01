@@ -18,12 +18,20 @@ use Illuminate\Validation\ValidationException;
 
 class VentaController extends Controller
 {
+    // FiltraPorSucursal se mantiene SOLO para lo que las Policies no hacen:
+    // aplicarFiltroSucursal() (scoping de listados), resolverSucursalId(),
+    // usuarioActual() y registrarAuditoria(). La autorización de acceso a
+    // un recurso puntual ahora la resuelve VentaPolicy.
     use FiltraPorSucursal;
 
     public function __construct(
         protected InventarioService $inventarioService,
         protected FacturaService $facturaService
     ) {
+        // Mapea automáticamente index->viewAny, show->view, store->create,
+        // update->update, destroy->delete contra VentaPolicy, usando el
+        // parámetro de ruta {venta}.
+        $this->authorizeResource(Venta::class, 'venta');
     }
 
     public function index(Request $request): JsonResponse
@@ -56,11 +64,11 @@ class VentaController extends Controller
     /**
      * Crea una venta junto con sus detalles. NO descuenta stock todavía
      * (la venta nace en estado 'pendiente'): el stock se descuenta
-     * cuando se confirma el pago, vía cambiarEstado(). Así, una venta
-     * que se cancela antes de pagar nunca llegó a tocar el inventario.
+     * cuando se confirma el pago, vía cambiarEstado().
      */
     public function store(StoreVentaRequest $request): JsonResponse
     {
+        // Autorización de 'create' ya resuelta por authorizeResource().
         $datos = $request->validated();
         $sucursalId = $this->resolverSucursalId($datos['sucursal_id'] ?? null);
 
@@ -77,7 +85,7 @@ class VentaController extends Controller
                 'estado'         => $datos['estado'] ?? 'pendiente',
                 'metodo_pago_id' => $datos['metodo_pago_id'] ?? null,
                 'observacion'    => $datos['observacion'] ?? null,
-                'total'          => 0, // se calcula abajo
+                'total'          => 0,
             ]);
 
             $total = 0;
@@ -114,24 +122,15 @@ class VentaController extends Controller
 
     public function show(Venta $venta): JsonResponse
     {
-        $this->autorizarAccesoSucursal($venta->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($venta->load([
             'sucursal', 'cajero', 'metodoPago', 'detalles.producto', 'comprobantes', 'factura',
         ]));
     }
 
-    /**
-     * Actualiza datos generales (método de pago, observación). El estado
-     * y los detalles NO se editan aquí: usa cambiarEstado() para el
-     * estado, y no se permite editar detalles de una venta ya creada
-     * (en su lugar, cancélala y crea una nueva) para mantener íntegro
-     * el historial de inventario y auditoría.
-     */
     public function update(UpdateVentaRequest $request, Venta $venta): JsonResponse
     {
-        $this->autorizarAccesoSucursal($venta->sucursal_id);
-
+        // Autorización de 'update' ya resuelta por authorizeResource().
         if ($venta->estado === 'cancelado') {
             return response()->json(['message' => 'No se puede editar una venta cancelada.'], 409);
         }
@@ -142,15 +141,13 @@ class VentaController extends Controller
     }
 
     /**
-     * Cambia el estado de la venta, disparando la lógica de negocio
-     * correspondiente:
-     *  - -> 'pagado': descuenta inventario de cada detalle y genera factura.
-     *  - -> 'cancelado': si ya se había descontado stock (porque pasó por
-     *    'pagado'), lo devuelve.
+     * Cambia el estado de la venta. Usa una ability propia
+     * ('cambiarEstado') porque no forma parte del CRUD estándar que
+     * cubre authorizeResource().
      */
     public function cambiarEstado(CambiarEstadoVentaRequest $request, Venta $venta): JsonResponse
     {
-        $this->autorizarAccesoSucursal($venta->sucursal_id);
+        $this->authorize('cambiarEstado', $venta);
 
         $estadoAnterior = $venta->estado;
         $estadoNuevo = $request->string('estado')->toString();
@@ -165,7 +162,6 @@ class VentaController extends Controller
 
         try {
             DB::transaction(function () use ($venta, $estadoAnterior, $estadoNuevo, $request) {
-                // Pasar a 'pagado': descuenta stock por primera vez y factura
                 if ($estadoNuevo === 'pagado' && $estadoAnterior !== 'pagado') {
                     foreach ($venta->detalles as $detalle) {
                         if ($detalle->producto->maneja_stock) {
@@ -182,7 +178,6 @@ class VentaController extends Controller
                     $this->facturaService->generarParaVenta($venta);
                 }
 
-                // Cancelar una venta que ya había descontado stock: lo devuelve
                 if ($estadoNuevo === 'cancelado' && in_array($estadoAnterior, ['pagado', 'entregado'], true)) {
                     foreach ($venta->detalles as $detalle) {
                         if ($detalle->producto->maneja_stock) {
@@ -214,15 +209,9 @@ class VentaController extends Controller
         return response()->json($venta->refresh()->load(['sucursal', 'cajero', 'metodoPago', 'detalles.producto', 'factura']));
     }
 
-    /**
-     * Elimina una venta. Solo se permite si está en 'pendiente' o
-     * 'cancelado' (nunca tocó o ya devolvió el inventario); de lo
-     * contrario debe cancelarse primero para no perder la trazabilidad.
-     */
     public function destroy(Venta $venta): JsonResponse
     {
-        $this->autorizarAccesoSucursal($venta->sucursal_id);
-
+        // Autorización de 'delete' ya resuelta por authorizeResource().
         if (!in_array($venta->estado, ['pendiente', 'cancelado'], true)) {
             return response()->json([
                 'message' => 'Solo se pueden eliminar ventas pendientes o canceladas. Cancela la venta primero.',
@@ -234,14 +223,5 @@ class VentaController extends Controller
         $this->registrarAuditoria('eliminar_venta', 'ventas', $venta->id_venta);
 
         return response()->json(null, 204);
-    }
-
-    protected function autorizarAccesoSucursal(int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }

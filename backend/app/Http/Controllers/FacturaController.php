@@ -14,7 +14,16 @@ use Illuminate\Http\Request;
  */
 class FacturaController extends Controller
 {
+    // FiltraPorSucursal se mantiene solo para aplicarFiltroSucursal()
+    // (scoping del listado). La autorización puntual la resuelve
+    // FacturaPolicy.
     use FiltraPorSucursal;
+
+    public function __construct()
+    {
+        // La ruta solo expone index/show.
+        $this->authorizeResource(Factura::class, 'factura');
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -37,17 +46,7 @@ class FacturaController extends Controller
 
     public function show(Factura $factura): JsonResponse
     {
-        $this->autorizarAccesoSucursal($factura->sucursal_id);
-
+        // Autorización de 'view' ya resuelta por authorizeResource().
         return response()->json($factura->load(['venta.detalles.producto', 'sucursal', 'cajero']));
-    }
-
-    protected function autorizarAccesoSucursal(int $sucursalIdRecurso): void
-    {
-        if ($this->esAdminGeneral()) {
-            return;
-        }
-
-        abort_if($sucursalIdRecurso !== $this->sucursalIdActual(), 403, 'No tienes acceso a recursos de otra sucursal.');
     }
 }
