@@ -14,10 +14,8 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email'    => ['required', 'email'],
-            'password' => ['required', 'string'],
-            // Opcional: nombre del dispositivo/cliente, útil para luego
-            // poder revocar tokens específicos (ej: "iphone-juan", "postman")
+            'id_usuario' => ['required', 'integer'],
+            'password'   => ['required', 'string'],
             'device_name' => ['sometimes', 'string', 'max:100'],
         ];
     }
