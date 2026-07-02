@@ -4,6 +4,10 @@ import { AuthProvider } from "./context/AuthContext";
 import AppLayout from "./layouts/AppLayout";
 import RolesView from "./views/RolesView";
 import UsuariosView from "./views/UsuariosView";
+import SucursalesView from "./views/SucursalesView";
+import CategoriasView from "./views/CategoriasView";
+import ProductosView from "./views/ProductosView";
+import FacturasView from "./views/FacturasView";
 
 // TODO: importar el resto de vistas a medida que se construyan.
 // import DashboardView from "./views/DashboardView";
@@ -22,11 +26,11 @@ export default function App() {
             <Route index element={<Navigate to="/roles" replace />} />
             <Route path="/roles" element={<RolesView />} />
             <Route path="/usuarios" element={<UsuariosView />} />
+            <Route path="/sucursales" element={<SucursalesView />} />
+            <Route path="/categorias" element={<CategoriasView />} />
+            <Route path="/productos" element={<ProductosView />} />
+            <Route path="/facturas" element={<FacturasView />} />
             {/* <Route path="/dashboard" element={<DashboardView />} /> */}
-            {/* <Route path="/sucursales" element={<SucursalesView />} /> */}
-            {/* <Route path="/productos" element={<ProductosView />} /> */}
-            {/* <Route path="/categorias" element={<CategoriasView />} /> */}
-            {/* <Route path="/facturas" element={<FacturasView />} /> */}
             {/* <Route path="/ventas/nueva" element={<NuevaVentaView />} /> */}
           </Route>
         </Routes>
