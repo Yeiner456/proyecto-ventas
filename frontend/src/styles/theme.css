@@ -1,0 +1,130 @@
+/* ============================================================================
+ * theme.css — Fuente única de verdad visual del proyecto.
+ * Basado en: acta_colores_tipografia.docx (v1.0, aprobado 10/06/2026)
+ * Se importa UNA vez en src/main.jsx. Ninguna vista debe redefinir estos
+ * tokens ni las clases genéricas de abajo — solo consumirlas.
+ * ==========================================================================*/
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;700&family=Roboto:wght@400;500&family=Roboto+Mono:wght@500&display=swap');
+
+:root {
+  /* 3.1 Colores primarios y de fondo */
+  --sena-green: #39A900;
+  --sena-green-dark: #2D8600;
+  --ink: #1A1A1A;
+  --bg: #F5F5F5;
+  --white: #FFFFFF;
+  --green-soft: #E8F5E0;
+
+  /* 3.2 Colores semánticos — solo para estados del sistema, no decorativos */
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --info: #3B82F6;
+
+  --text-secondary: #6B7280;
+  --border: #E5E7EB;
+
+  --font-display: 'Inter', sans-serif;
+  --font-body: 'Roboto', sans-serif;
+  --font-mono: 'Roboto Mono', monospace;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--ink);
+}
+*, *::before, *::after { box-sizing: border-box; }
+
+/* --- Tipografía (4.2) ----------------------------------------------------- */
+.page-title { font-family: var(--font-display); font-weight: 700; font-size: 30px; margin: 0 0 6px 0; }
+.section-title { font-family: var(--font-display); font-weight: 700; font-size: 18px; margin: 0 0 4px 0; }
+.text-muted { font-family: var(--font-body); font-size: 13px; color: var(--text-secondary); }
+.text-mono { font-family: var(--font-mono); font-weight: 500; }
+.breadcrumb { font-family: var(--font-body); font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
+
+/* --- Botones ---------------------------------------------------------------
+ * Regla del acta (sección 5): el verde SENA es solo para acción principal
+ * y estados de éxito — por eso btn-outline es blanco, no verde. */
+.btn { font-family: var(--font-body); font-weight: 500; font-size: 14px; border-radius: 8px; padding: 10px 18px; cursor: pointer; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 8px; transition: background-color .15s ease, border-color .15s ease; white-space: nowrap; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn-primary { background: var(--sena-green); color: var(--white); }
+.btn-primary:hover:not(:disabled) { background: var(--sena-green-dark); }
+.btn-outline { background: var(--white); color: var(--ink); border-color: var(--border); }
+.btn-outline:hover:not(:disabled) { border-color: var(--sena-green); color: var(--sena-green-dark); }
+.btn-danger { background: var(--danger); color: var(--white); }
+.btn-danger:hover:not(:disabled) { background: #DC2626; }
+.btn-danger-ghost { background: var(--white); color: var(--danger); border-color: var(--border); }
+.btn-danger-ghost:hover:not(:disabled) { border-color: var(--danger); background: #FEF2F2; }
+.btn-sm { padding: 7px 12px; font-size: 13px; }
+
+/* --- Badges (estados semánticos, sección 3.2) ------------------------------ */
+.badge { font-family: var(--font-body); font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.badge-success { background: var(--green-soft); color: var(--sena-green-dark); }
+.badge-warning { background: #FFFBEB; color: #92400E; }
+.badge-danger { background: #FEF2F2; color: #991B1B; }
+.badge-info { background: #EFF6FF; color: #1E40AF; }
+.badge-neutral { background: #F3F4F6; color: var(--text-secondary); }
+
+/* --- Tarjetas / stat cards -------------------------------------------------- */
+.card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; }
+.stat-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.stat-label { font-family: var(--font-body); font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+.stat-value { font-family: var(--font-mono); font-weight: 500; font-size: 28px; line-height: 1; }
+.stat-note { font-family: var(--font-body); font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+
+/* --- Tablas ----------------------------------------------------------------- */
+.data-table-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+table.data-table { width: 100%; border-collapse: collapse; }
+.data-table thead th { text-align: left; font-family: var(--font-body); font-weight: 500; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .03em; padding: 12px 20px; background: #FAFAFA; border-bottom: 1px solid var(--border); }
+.data-table tbody td { padding: 13px 20px; font-family: var(--font-body); font-size: 13.5px; border-bottom: 1px solid var(--border); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover { background: #FAFAFA; }
+.data-table .empty-row td { text-align: center; padding: 32px; color: var(--text-secondary); }
+
+/* --- Formularios ------------------------------------------------------------ */
+.field { margin-bottom: 16px; }
+.field-label { display: block; font-family: var(--font-body); font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+.field-input, .field-textarea, .field-select { width: 100%; font-family: var(--font-body); font-size: 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; outline: none; }
+.field-input:focus, .field-textarea:focus, .field-select:focus { border-color: var(--sena-green); box-shadow: 0 0 0 3px var(--green-soft); }
+.field-textarea { resize: vertical; min-height: 72px; }
+.field-help { font-family: var(--font-body); font-size: 12px; color: var(--text-secondary); margin-top: 5px; line-height: 1.4; }
+.field-help.error { color: var(--danger); }
+.field-help.warning { color: var(--warning); }
+
+/* --- Alertas ----------------------------------------------------------------- */
+.alert { display: flex; gap: 10px; padding: 12px 14px; border-radius: 8px; font-family: var(--font-body); font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+.alert-warning { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+.alert-danger { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+.alert-info { background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; }
+
+/* --- Modales ------------------------------------------------------------------ */
+.modal-overlay { position: fixed; inset: 0; background: rgba(26,26,26,.45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+.modal { background: var(--white); border-radius: 14px; width: 100%; max-width: 460px; padding: 24px; max-height: 88vh; overflow-y: auto; }
+.modal-wide { max-width: 560px; }
+.modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+.modal-title { font-family: var(--font-display); font-weight: 700; font-size: 18px; margin: 0; }
+.modal-close { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px; border-radius: 6px; }
+.modal-close:hover { background: #F3F4F6; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+/* --- Layout: Sidebar + Shell --------------------------------------------------- */
+.app-shell { display: flex; min-height: 100vh; }
+.app-sidebar { width: 236px; flex-shrink: 0; background: var(--ink); color: var(--white); display: flex; flex-direction: column; }
+.app-sidebar-brand { padding: 20px 20px 16px 20px; }
+.app-sidebar-brand-name { font-family: var(--font-display); font-weight: 700; font-size: 17px; margin: 0; }
+.app-sidebar-brand-sub { font-family: var(--font-body); font-size: 11.5px; color: #9CA3AF; margin-top: 3px; }
+.app-sidebar-chip { display: inline-block; margin-top: 8px; background: var(--green-soft); color: var(--sena-green-dark); font-size: 11.5px; font-weight: 500; padding: 3px 10px; border-radius: 999px; }
+.app-nav { flex: 1; overflow-y: auto; padding: 4px 12px 12px 12px; }
+.app-nav-group-label { font-family: var(--font-body); font-size: 10.5px; font-weight: 500; color: #9CA3AF; text-transform: uppercase; letter-spacing: .05em; padding: 14px 10px 6px 10px; }
+.app-nav-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 9px 10px; border-radius: 8px; border: none; background: none; color: #D1D5DB; font-family: var(--font-body); font-size: 13.5px; cursor: pointer; margin-bottom: 2px; text-decoration: none; }
+.app-nav-item:hover { background: rgba(255,255,255,.06); color: var(--white); }
+.app-nav-item.active { background: var(--sena-green); color: var(--white); font-weight: 500; }
+.app-sidebar-footer { border-top: 1px solid rgba(255,255,255,.08); padding: 14px 16px; display: flex; align-items: center; gap: 10px; }
+.app-sidebar-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--sena-green); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.app-sidebar-user-name { font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--white); }
+.app-sidebar-user-role { font-family: var(--font-body); font-size: 11.5px; color: #9CA3AF; }
+.app-sidebar-logout { margin-left: auto; background: none; border: none; color: #9CA3AF; cursor: pointer; padding: 6px; border-radius: 6px; }
+.app-sidebar-logout:hover { background: rgba(255,255,255,.08); color: var(--white); }
+.app-content { flex: 1; background: var(--bg); min-width: 0; padding: 28px 32px; }
