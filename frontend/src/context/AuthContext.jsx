@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from "react";
+import { resolverActor } from "../mocks/seedData";
 
 /* ============================================================================
  * AuthContext — punto único de verdad sobre "quién está logueado".
@@ -26,11 +27,12 @@ import React, { createContext, useContext, useState } from "react";
 const AuthContext = createContext(null);
 
 // TODO: borrar este bloque cuando el login real esté conectado.
+// Los ids vienen de src/mocks/seedData.js — un representante por rol.
 const DEMO_USERS = {
-  admin_general: { id_usuario: 1, nombre: "Admin", rol: "admin_general", sucursal: null },
-  admin_sucursal: { id_usuario: 3, nombre: "Laura Pérez", rol: "admin_sucursal", sucursal: "Sucursal Centro" },
-  cajero: { id_usuario: 5, nombre: "Maria Gaviria", rol: "cajero", sucursal: "Sucursal Centro" },
-  contador: { id_usuario: 11, nombre: "Felipe Naranjo", rol: "contador", sucursal: "Sucursal Centro" },
+  admin_general: resolverActor(1),   // Admin
+  admin_sucursal: resolverActor(3),  // Laura Pérez — Sucursal Centro
+  cajero: resolverActor(5),          // Maria Gaviria — Sucursal Centro
+  contador: resolverActor(11),       // Felipe Naranjo — Sucursal Centro
 };
 
 export function AuthProvider({ children }) {

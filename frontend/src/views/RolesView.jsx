@@ -11,6 +11,11 @@ import {
   AlertTriangle,
   Info,
 } from "lucide-react";
+import {
+  roles as rolesSeed,
+  usuarios as usuariosSeed,
+  nombreSucursal,
+} from "../mocks/seedData";
 
 /* ============================================================================
  * ROLES — Vista CRUD
@@ -37,51 +42,14 @@ import {
 // Sustituir el cuerpo de estas funciones por fetch() reales cuando el
 // frontend se conecte al backend. Las firmas ya están pensadas para eso.
 
-const initialRoles = [
-  {
-    id_rol: 1,
-    nombre: "admin_general",
-    descripcion:
-      "Administrador general del sistema. Ve y gestiona todas las sucursales.",
-    activo: true,
-  },
-  {
-    id_rol: 2,
-    nombre: "admin_sucursal",
-    descripcion:
-      "Administra una sucursal específica (incluye funciones contables de esa sucursal).",
-    activo: true,
-  },
-  {
-    id_rol: 3,
-    nombre: "cajero",
-    descripcion:
-      "Opera el día a día: registra ventas y cobra. Atado a una sucursal.",
-    activo: true,
-  },
-  {
-    id_rol: 4,
-    nombre: "contador",
-    descripcion:
-      "Consulta facturación, auditoría y genera reportes contables.",
-    activo: false,
-  },
-];
-
-const initialUsuarios = [
-  { id_usuario: 1, nombre: "Juan Pablo Montoya", email: "j.montoya@example.com", rol_id: 1, sucursal: "—", activo: true },
-  { id_usuario: 2, nombre: "Yeiner Smith Quintero", email: "y.quintero@example.com", rol_id: 1, sucursal: "—", activo: true },
-  { id_usuario: 3, nombre: "Laura Pérez", email: "l.perez@example.com", rol_id: 2, sucursal: "Sucursal Centro", activo: true },
-  { id_usuario: 4, nombre: "Andrés Torres", email: "a.torres@example.com", rol_id: 2, sucursal: "Sucursal Norte", activo: true },
-  { id_usuario: 5, nombre: "Maria Gaviria", email: "m.gaviria@example.com", rol_id: 3, sucursal: "Sucursal Centro", activo: true },
-  { id_usuario: 6, nombre: "Sofia Montoya", email: "s.montoya@example.com", rol_id: 3, sucursal: "Sucursal Centro", activo: true },
-  { id_usuario: 7, nombre: "Santiago Ruiz", email: "s.ruiz@example.com", rol_id: 3, sucursal: "Sucursal Centro", activo: true },
-  { id_usuario: 8, nombre: "Camila Rojas", email: "c.rojas@example.com", rol_id: 3, sucursal: "Sucursal Norte", activo: true },
-  { id_usuario: 9, nombre: "Daniel Ospina", email: "d.ospina@example.com", rol_id: 3, sucursal: "Sucursal Sur", activo: false },
-  { id_usuario: 10, nombre: "Valentina Cárdenas", email: "v.cardenas@example.com", rol_id: 3, sucursal: "Sucursal Sur", activo: true },
-  { id_usuario: 11, nombre: "Felipe Naranjo", email: "f.naranjo@example.com", rol_id: 4, sucursal: "Sucursal Centro", activo: false },
-  { id_usuario: 12, nombre: "Isabella Castro", email: "i.castro@example.com", rol_id: 4, sucursal: "Sucursal Norte", activo: false },
-];
+// Fuente: src/mocks/seedData.js (única fuente de verdad, compartida con
+// AuthContext y UsuariosView). Aquí solo se adapta la forma: esta vista
+// pinta el nombre de la sucursal, no su id.
+const initialRoles = rolesSeed;
+const initialUsuarios = usuariosSeed.map((u) => ({
+  ...u,
+  sucursal: nombreSucursal(u.sucursal_id) ?? "—",
+}));
 
 // Solo lectura: refleja lo que las Policies ya deciden por nombre de rol.
 const PERMISOS_POR_ROL = {
