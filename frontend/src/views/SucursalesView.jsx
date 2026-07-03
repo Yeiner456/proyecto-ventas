@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { sucursales as sucursalesSeed, usuarios as usuariosSeed } from "../mocks/seedData";
+import "../styles/SucursalesView.css";
 
 /* ============================================================================
  * SUCURSALES — Vista CRUD
@@ -64,26 +65,12 @@ const api = {
   },
 };
 
-const styles = `
-.sv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
-.sv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 560px; line-height: 1.5; }
-.sv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
-.sv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-.sv-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-.sv-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.sv-icon { width: 38px; height: 38px; border-radius: 9px; background: var(--green-soft); color: var(--sena-green-dark); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.sv-name { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; margin: 0; }
-.sv-meta { display: flex; flex-direction: column; gap: 6px; }
-.sv-meta-row { display: flex; align-items: center; gap: 8px; font-family: 'Roboto', sans-serif; font-size: 13px; color: var(--text-secondary); }
-.sv-actions { display: flex; gap: 8px; margin-top: auto; }
-.sv-readonly-note { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
-`;
 
 function SucursalCard({ sucursal, puedeEditar, onEdit, onDelete }) {
   return (
     <div className="sv-card">
       <div className="sv-card-top">
-        <div style={{ display: "flex", gap: 12 }}>
+        <div className="sv-card-info">
           <div className="sv-icon">
             <Building2 size={18} />
           </div>
@@ -120,7 +107,7 @@ function SucursalCard({ sucursal, puedeEditar, onEdit, onDelete }) {
           <button
             className="btn btn-danger-ghost btn-sm"
             onClick={() => onDelete(sucursal)}
-            style={{ marginLeft: "auto" }}
+            className="u-ml-auto"
           >
             <Trash2 size={14} />
           </button>
@@ -183,7 +170,7 @@ function SucursalFormModal({ initial, onCancel, onSubmit, saving, existentes }) 
           )}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div className="sv-form-grid-2">
           <div className="field">
             <label className="field-label">Teléfono</label>
             <input className="field-input" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
@@ -201,9 +188,9 @@ function SucursalFormModal({ initial, onCancel, onSubmit, saving, existentes }) 
         </div>
 
         <div className="field">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="sv-checkbox-row">
             <input type="checkbox" id="sv-activa" checked={activa} onChange={(e) => setActiva(e.target.checked)} />
-            <label htmlFor="sv-activa" className="field-label" style={{ margin: 0 }}>
+            <label htmlFor="sv-activa" className="field-label u-label-inline">
               Sucursal activa
             </label>
           </div>
@@ -232,12 +219,12 @@ function ConfirmDeleteModal({ sucursal, onCancel, onConfirm, deleting, error }) 
             <X size={18} />
           </button>
         </div>
-        <p style={{ fontFamily: "'Roboto', sans-serif", fontSize: 14, lineHeight: 1.5 }}>
+        <p className="u-confirm-text">
           ¿Seguro que quieres eliminar <strong>{sucursal.nombre}</strong>? Esta acción no se puede deshacer.
         </p>
         {error && (
           <div className="alert alert-danger">
-            <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={16} className="u-icon-inline" />
             <span>{error}</span>
           </div>
         )}
@@ -317,8 +304,6 @@ export default function SucursalesView() {
 
   return (
     <div>
-      <style>{styles}</style>
-
       <div className="breadcrumb">› Sucursales</div>
       <div className="sv-header">
         <div>
@@ -387,23 +372,7 @@ export default function SucursalesView() {
       )}
 
       {toast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            background: "var(--ink)",
-            color: "var(--white)",
-            padding: "12px 18px",
-            borderRadius: 8,
-            fontFamily: "'Roboto', sans-serif",
-            fontSize: 13.5,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            boxShadow: "0 8px 24px rgba(0,0,0,.25)",
-          }}
-        >
+        <div className="toast">
           <Info size={15} />
           {toast}
         </div>

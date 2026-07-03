@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { CreditCard, Plus, Pencil, Trash2, X, AlertTriangle, Info, Lock, Star } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { metodosPago as metodosPagoSeed, ventas as ventasSeed } from "../mocks/seedData";
+import "../styles/MetodosPagoView.css";
 
 /* ============================================================================
  * MÉTODOS DE PAGO — Vista CRUD
@@ -80,9 +81,9 @@ function FormModal({ initial, onCancel, onSubmit, saving, existentes }) {
         </div>
 
         <div className="field">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="u-flex-gap-8">
             <input type="checkbox" id="mp-default" checked={esDefault} onChange={(e) => setEsDefault(e.target.checked)} />
-            <label htmlFor="mp-default" className="field-label" style={{ margin: 0 }}>
+            <label htmlFor="mp-default" className="field-label u-label-inline">
               Método predeterminado
             </label>
           </div>
@@ -90,18 +91,18 @@ function FormModal({ initial, onCancel, onSubmit, saving, existentes }) {
         </div>
 
         <div className="field">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="u-flex-gap-8">
             <input type="checkbox" id="mp-comp" checked={requiereComp} onChange={(e) => setRequiereComp(e.target.checked)} />
-            <label htmlFor="mp-comp" className="field-label" style={{ margin: 0 }}>
+            <label htmlFor="mp-comp" className="field-label u-label-inline">
               Requiere comprobante de pago
             </label>
           </div>
         </div>
 
         <div className="field">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="u-flex-gap-8">
             <input type="checkbox" id="mp-activo" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
-            <label htmlFor="mp-activo" className="field-label" style={{ margin: 0 }}>
+            <label htmlFor="mp-activo" className="field-label u-label-inline">
               Activo
             </label>
           </div>
@@ -128,12 +129,12 @@ function ConfirmDeleteModal({ metodo, onCancel, onConfirm, deleting, error }) {
             <X size={18} />
           </button>
         </div>
-        <p style={{ fontFamily: "'Roboto', sans-serif", fontSize: 14, lineHeight: 1.5 }}>
+        <p className="u-confirm-text">
           ¿Seguro que quieres eliminar <strong>{metodo.nombre}</strong>?
         </p>
         {error && (
           <div className="alert alert-danger">
-            <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={16} className="u-icon-inline" />
             <span>{error}</span>
           </div>
         )}
@@ -207,10 +208,10 @@ export default function MetodosPagoView() {
   return (
     <div>
       <div className="breadcrumb">› Métodos de pago</div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, gap: 16, flexWrap: "wrap" }}>
+      <div className="mpv-header">
         <div>
           <h1 className="page-title">Métodos de pago</h1>
-          <p className="text-muted" style={{ maxWidth: 560 }}>
+          <p className="text-muted mpv-subtitle">
             {puedeEditar ? "Catálogo global, no depende de la sucursal." : "Solo admin_general puede crear, editar o eliminar métodos de pago."}
           </p>
         </div>
@@ -236,14 +237,14 @@ export default function MetodosPagoView() {
             {metodos.map((m) => (
               <tr key={m.id_metodo_pago}>
                 <td>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <CreditCard size={14} style={{ color: "var(--sena-green-dark)" }} />
+                  <div className="u-flex-gap-8">
+                    <CreditCard size={14} className="mpv-nombre-icon" />
                     {m.nombre}
                   </div>
                 </td>
                 <td>
                   {m.es_default ? (
-                    <span className="badge badge-success" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <span className="badge badge-success mpv-badge-star">
                       <Star size={11} /> Sí
                     </span>
                   ) : (
@@ -256,7 +257,7 @@ export default function MetodosPagoView() {
                 </td>
                 <td>
                   {puedeEditar ? (
-                    <div style={{ display: "flex", gap: 6 }}>
+                    <div className="mpv-actions-cell">
                       <button className="btn btn-outline btn-sm" onClick={() => setFormModal({ mode: "edit", metodo: m })}>
                         <Pencil size={14} />
                       </button>
@@ -271,7 +272,7 @@ export default function MetodosPagoView() {
                       </button>
                     </div>
                   ) : (
-                    <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-secondary)", fontSize: 12 }}>
+                    <span className="mpv-readonly-note">
                       <Lock size={12} /> Solo lectura
                     </span>
                   )}
@@ -303,7 +304,7 @@ export default function MetodosPagoView() {
       )}
 
       {toast && (
-        <div style={{ position: "fixed", bottom: 24, right: 24, background: "var(--ink)", color: "var(--white)", padding: "12px 18px", borderRadius: 8, fontFamily: "'Roboto', sans-serif", fontSize: 13.5, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>
+        <div className="toast">
           <Info size={15} />
           {toast}
         </div>

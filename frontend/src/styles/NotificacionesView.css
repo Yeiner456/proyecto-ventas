@@ -1,0 +1,19 @@
+/* ============================================================================
+ * NotificacionesView.css
+ * ==========================================================================*/
+
+.ntv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
+.ntv-toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; }
+.ntv-item { display: flex; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); align-items: flex-start; }
+.ntv-item:last-child { border-bottom: none; }
+.ntv-item.no-leida { background: #FAFCF8; }
+.ntv-icon { width: 34px; height: 34px; border-radius: 8px; background: #FFFBEB; color: var(--warning); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ntv-msg { font-family: 'Roboto', sans-serif; font-size: 13.5px; line-height: 1.5; }
+.ntv-meta { font-family: 'Roboto', sans-serif; font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; }
+.ntv-actions { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }
+
+.ntv-subtitle { max-width: 560px; }
+.ntv-stat-card { min-width: 140px; }
+.ntv-checkbox-label { display: flex; align-items: center; gap: 6px; font-family: 'Roboto', sans-serif; font-size: 13px; }
+.ntv-empty { padding: 40px; text-align: center; color: var(--text-secondary); font-family: 'Roboto', sans-serif; font-size: 13px; }
+.ntv-item-body { flex: 1; }

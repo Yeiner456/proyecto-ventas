@@ -1,0 +1,34 @@
+/* ============================================================================
+ * VentasView.css
+ * ==========================================================================*/
+
+.vv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+.vv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 620px; line-height: 1.5; }
+.vv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.vv-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.vv-select { max-width: 200px; }
+.vv-date { max-width: 160px; }
+.vv-row-actions { display: flex; gap: 6px; }
+.vv-detalle-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-family: 'Roboto', sans-serif; font-size: 13px; }
+.vv-detalle-row:last-child { border-bottom: none; }
+.vv-total-row { display: flex; justify-content: space-between; padding-top: 10px; margin-top: 4px; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; }
+.vv-timeline { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 14px 0; }
+.vv-timeline-step { font-family: 'Roboto', sans-serif; font-size: 11.5px; padding: 4px 10px; border-radius: 999px; background: #F3F4F6; color: var(--text-secondary); }
+.vv-timeline-step.done { background: var(--green-soft); color: var(--sena-green-dark); }
+.vv-timeline-step.current { background: var(--sena-green); color: var(--white); font-weight: 500; }
+
+/* Flecha entre pasos del timeline */
+.vv-timeline-arrow { color: var(--text-secondary); }
+
+/* Grid de datos del detalle (Sucursal / Cajero / Fecha / Método de pago) */
+.vv-detalle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; font-family: 'Roboto', sans-serif; font-size: 13px; }
+
+/* Alerta de observación (tamaño reducido) */
+.vv-obs-alert { font-size: 12.5px; }
+
+/* Etiqueta "PRODUCTOS" en mayúsculas dentro del detalle */
+.vv-productos-label { margin-bottom: 8px; text-transform: uppercase; letter-spacing: .03em; }
+
+/* Celda de N° de venta en la tabla (ícono + texto mono) */
+.vv-numero-cell { display: flex; align-items: center; gap: 8px; }
+.vv-numero-icon { color: var(--sena-green-dark); }

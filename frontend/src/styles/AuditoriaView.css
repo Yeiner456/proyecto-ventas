@@ -1,0 +1,28 @@
+/* ============================================================================
+ * AuditoriaView.css
+ * Extraído del template literal `const styles` que vivía embebido en
+ * AuditoriaView.jsx, más las reglas para los style={{}} inline que tenía
+ * el componente (detalle del modal, alertas, filas de tabla).
+ * ==========================================================================*/
+
+.av-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
+.av-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.av-select { max-width: 200px; }
+.av-date { max-width: 160px; }
+.av-diff { background: #FAFAFA; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Roboto Mono', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.av-diff-label { font-family: 'Roboto', sans-serif; font-size: 11px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .03em; margin: 12px 0 6px 0; }
+
+/* Grid de datos del detalle (Usuario / Sucursal / Fecha / IP / Tabla / Registro) */
+.av-detalle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; font-family: 'Roboto', sans-serif; font-size: 13px; }
+
+/* Subtítulo de la vista */
+.av-subtitle { max-width: 560px; }
+
+/* Búsqueda con ícono */
+.av-search-wrap { position: relative; flex: 1; min-width: 200px; }
+.av-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
+.av-search-input { padding-left: 36px; }
+
+/* Fila de acción dentro de la tabla (ícono + texto) */
+.av-action-cell { display: flex; align-items: center; gap: 6px; }
+.av-action-icon { color: var(--sena-green-dark); }

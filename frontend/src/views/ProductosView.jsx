@@ -9,6 +9,7 @@ import {
   nombreSucursal,
   stockDe,
 } from "../mocks/seedData";
+import "../styles/ProductosView.css";
 
 /* ============================================================================
  * PRODUCTOS — Vista CRUD
@@ -68,17 +69,6 @@ function productoVisible(actor, producto) {
   return producto.sucursal_id === sucursalActorId;
 }
 
-const styles = `
-.pv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
-.pv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 560px; line-height: 1.5; }
-.pv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
-.pv-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
-.pv-search { position: relative; flex: 1; min-width: 220px; }
-.pv-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
-.pv-search input { padding-left: 36px; }
-.pv-select { max-width: 190px; }
-.pv-stock-low { color: var(--danger); font-weight: 500; }
-`;
 
 function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existentes, stockInicialActual }) {
   const isEdit = Boolean(initial);
@@ -144,7 +134,7 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
           </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14 }}>
+        <div className="pv-form-grid-2fr1fr">
           <div className="field">
             <label className="field-label">Nombre</label>
             <input className="field-input" value={nombre} onChange={(e) => setNombre(e.target.value)} />
@@ -165,7 +155,7 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div className="pv-form-grid-2">
           <div className="field">
             <label className="field-label">Sucursal</label>
             {admin ? (
@@ -178,7 +168,7 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
                 ))}
               </select>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: 12.5 }}>
+              <div className="pv-lock-note">
                 <Lock size={13} /> {actor.sucursal}
               </div>
             )}
@@ -209,9 +199,9 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
         </div>
 
         <div className="field">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="pv-checkbox-row">
             <input type="checkbox" id="pv-stock" checked={manejaStock} onChange={(e) => setManejaStock(e.target.checked)} />
-            <label htmlFor="pv-stock" className="field-label" style={{ margin: 0 }}>
+            <label htmlFor="pv-stock" className="field-label u-label-inline">
               Maneja inventario
             </label>
           </div>
@@ -221,7 +211,7 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
         </div>
 
         {manejaStock && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div className="pv-form-grid-2">
             <div className="field">
               <label className="field-label">Stock mínimo (alerta)</label>
               <input
@@ -246,7 +236,7 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
             ) : (
               <div className="field">
                 <label className="field-label">Stock actual</label>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: 12.5 }}>
+                <div className="pv-lock-note">
                   <Lock size={13} /> {stockInicialActual} unidades — ajústalo desde Inventario, no desde aquí.
                 </div>
               </div>
@@ -255,9 +245,9 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
         )}
 
         <div className="field">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="pv-checkbox-row">
             <input type="checkbox" id="pv-activo" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
-            <label htmlFor="pv-activo" className="field-label" style={{ margin: 0 }}>
+            <label htmlFor="pv-activo" className="field-label u-label-inline">
               Producto activo
             </label>
           </div>
@@ -286,12 +276,12 @@ function ConfirmDeleteModal({ producto, onCancel, onConfirm, deleting, error }) 
             <X size={18} />
           </button>
         </div>
-        <p style={{ fontFamily: "'Roboto', sans-serif", fontSize: 14, lineHeight: 1.5 }}>
+        <p className="u-confirm-text">
           ¿Seguro que quieres eliminar <strong>{producto.nombre}</strong>?
         </p>
         {error && (
           <div className="alert alert-danger">
-            <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={16} className="u-icon-inline" />
             <span>{error}</span>
           </div>
         )}
@@ -378,8 +368,8 @@ export default function ProductosView() {
       <div>
         <div className="breadcrumb">› Producto</div>
         <h1 className="page-title">Productos</h1>
-        <div className="alert alert-danger" style={{ maxWidth: 480 }}>
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div className="alert alert-danger u-max-480">
+          <AlertTriangle size={16} className="u-icon-inline" />
           <span>No tienes permisos para gestionar productos.</span>
         </div>
       </div>
@@ -388,7 +378,6 @@ export default function ProductosView() {
 
   return (
     <div>
-      <style>{styles}</style>
       <div className="breadcrumb">› Producto</div>
       <div className="pv-header">
         <div>
@@ -413,7 +402,7 @@ export default function ProductosView() {
         </div>
         <div className="stat-card">
           <div className="stat-label">Stock bajo</div>
-          <div className="stat-value" style={{ color: stats.bajoStock > 0 ? "var(--danger)" : "inherit" }}>
+          <div className={`stat-value${stats.bajoStock > 0 ? " u-value-danger" : ""}`}>
             {stats.bajoStock}
           </div>
         </div>
@@ -464,8 +453,8 @@ export default function ProductosView() {
                 return (
                   <tr key={p.id_producto}>
                     <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <Package size={14} style={{ color: "var(--sena-green-dark)" }} />
+                      <div className="pv-checkbox-row">
+                        <Package size={14} className="pv-nombre-icon" />
                         {p.nombre}
                       </div>
                     </td>
@@ -490,7 +479,7 @@ export default function ProductosView() {
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: 6 }}>
+                      <div className="pv-actions-cell">
                         <button className="btn btn-outline btn-sm" onClick={() => setFormModal({ mode: "edit", producto: p })}>
                           <Pencil size={14} />
                         </button>
@@ -536,7 +525,7 @@ export default function ProductosView() {
       )}
 
       {toast && (
-        <div style={{ position: "fixed", bottom: 24, right: 24, background: "var(--ink)", color: "var(--white)", padding: "12px 18px", borderRadius: 8, fontFamily: "'Roboto', sans-serif", fontSize: 13.5, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>
+        <div className="toast">
           <Info size={15} />
           {toast}
         </div>

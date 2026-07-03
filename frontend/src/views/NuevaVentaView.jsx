@@ -10,6 +10,7 @@ import {
   metodosPago as metodosPagoSeed,
   facturas as facturasSeed,
 } from "../mocks/seedData";
+import "../styles/NuevaVentaView.css";
 
 /* ============================================================================
  * NUEVA VENTA — POS del cajero
@@ -53,47 +54,6 @@ function formatMoney(n) {
 
 const wait = (ms = 350) => new Promise((res) => setTimeout(res, ms));
 
-const styles = `
-.nv-layout { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
-.nv-search { position: relative; margin-bottom: 14px; }
-.nv-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
-.nv-search input { padding-left: 40px; }
-.nv-pills { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
-.nv-pill { padding: 7px 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--white); font-family: 'Roboto', sans-serif; font-size: 13px; cursor: pointer; color: var(--ink); }
-.nv-pill.active { background: var(--sena-green); border-color: var(--sena-green); color: var(--white); font-weight: 500; }
-.nv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.nv-card { background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 14px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 6px; }
-.nv-card:hover:not(:disabled) { border-color: var(--sena-green); }
-.nv-card:disabled { opacity: .5; cursor: not-allowed; }
-.nv-card-name { font-family: 'Roboto', sans-serif; font-weight: 500; font-size: 13.5px; }
-.nv-card-cat { font-family: 'Roboto', sans-serif; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .03em; }
-.nv-card-price { font-family: 'Roboto Mono', monospace; font-weight: 500; font-size: 15px; margin-top: 2px; }
-.nv-card-stock { font-family: 'Roboto', sans-serif; font-size: 11px; color: var(--text-secondary); }
-.nv-card-stock.low { color: var(--danger); }
-
-.nv-cart { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 18px; position: sticky; top: 20px; }
-.nv-cart-title { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; margin: 0 0 14px 0; }
-.nv-cart-empty { text-align: center; padding: 30px 10px; color: var(--text-secondary); font-family: 'Roboto', sans-serif; font-size: 13px; }
-.nv-cart-item { border-bottom: 1px solid var(--border); padding: 10px 0; }
-.nv-cart-item-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.nv-cart-item-name { font-family: 'Roboto', sans-serif; font-size: 13.5px; font-weight: 500; }
-.nv-cart-item-price { font-family: 'Roboto Mono', monospace; font-size: 13px; }
-.nv-cart-adjust-note { font-family: 'Roboto', sans-serif; font-size: 11px; color: var(--warning); margin-top: 2px; }
-.nv-qty { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.nv-qty button { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border); background: var(--white); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.nv-qty span { font-family: 'Roboto Mono', monospace; font-size: 13px; min-width: 20px; text-align: center; }
-.nv-cart-item-actions { display: flex; gap: 6px; margin-left: auto; }
-.nv-cart-item-actions button { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 2px; }
-.nv-cart-item-actions button:hover { color: var(--ink); }
-
-.nv-totals { padding-top: 12px; margin-top: 4px; }
-.nv-total-row { display: flex; justify-content: space-between; font-family: 'Roboto', sans-serif; font-size: 13px; padding: 4px 0; }
-.nv-total-row.grand { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 17px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; }
-
-.nv-metodos { display: flex; gap: 6px; margin: 12px 0; flex-wrap: wrap; }
-.nv-metodo-pill { flex: 1; min-width: 90px; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--white); font-family: 'Roboto', sans-serif; font-size: 12.5px; cursor: pointer; text-align: center; }
-.nv-metodo-pill.active { border-color: var(--sena-green); background: var(--green-soft); color: var(--sena-green-dark); font-weight: 500; }
-`;
 
 function AjustePrecioModal({ item, onCancel, onSave }) {
   const [precio, setPrecio] = useState(item.precio_unitario_venta);
@@ -132,12 +92,12 @@ function AjustePrecioModal({ item, onCancel, onSave }) {
 function ConfirmacionModal({ factura, onCerrar }) {
   return (
     <div className="modal-overlay" onMouseDown={onCerrar}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
-        <CheckCircle2 size={40} style={{ color: "var(--sena-green)", margin: "8px auto" }} />
-        <h3 className="modal-title" style={{ marginBottom: 4 }}>Venta cobrada</h3>
-        <p className="field-help" style={{ marginBottom: 4 }}>Factura generada</p>
-        <p className="text-mono" style={{ fontSize: 18, marginBottom: 16 }}>{factura.numero_factura}</p>
-        <button className="btn btn-primary" style={{ width: "100%" }} onClick={onCerrar}>
+      <div className="modal nv-confirm-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <CheckCircle2 size={40} className="nv-confirm-icon" />
+        <h3 className="modal-title u-mb-4">Venta cobrada</h3>
+        <p className="field-help u-mb-4">Factura generada</p>
+        <p className="text-mono nv-confirm-numero">{factura.numero_factura}</p>
+        <button className="btn btn-primary u-w-full" onClick={onCerrar}>
           Nueva venta
         </button>
       </div>
@@ -296,8 +256,8 @@ export default function NuevaVentaView() {
       <div>
         <div className="breadcrumb">› Nueva venta</div>
         <h1 className="page-title">Nueva venta</h1>
-        <div className="alert alert-danger" style={{ maxWidth: 480 }}>
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div className="alert alert-danger u-max-480">
+          <AlertTriangle size={16} className="u-icon-inline" />
           <span>Esta pantalla es para cajeros y administradores de sucursal (VentaPolicy::create).</span>
         </div>
       </div>
@@ -308,10 +268,9 @@ export default function NuevaVentaView() {
 
   return (
     <div>
-      <style>{styles}</style>
       <div className="breadcrumb">› Nueva venta</div>
-      <h1 className="page-title" style={{ marginBottom: 4 }}>Nueva venta</h1>
-      <p className="text-muted" style={{ marginBottom: 18 }}>{actor.sucursal}</p>
+      <h1 className="page-title u-mb-4">Nueva venta</h1>
+      <p className="text-muted u-mb-18">{actor.sucursal}</p>
 
       <div className="nv-layout">
         <div>
@@ -401,7 +360,7 @@ export default function NuevaVentaView() {
               <span className="text-mono">{formatMoney(subtotal + ajusteTotal)}</span>
             </div>
             {ajusteTotal !== 0 && (
-              <div className="nv-total-row" style={{ color: "var(--warning)" }}>
+              <div className="nv-total-row nv-total-row--ajuste">
                 <span>Ajuste de precios</span>
                 <span className="text-mono">{ajusteTotal > 0 ? "-" : "+"}{formatMoney(Math.abs(ajusteTotal))}</span>
               </div>
@@ -425,38 +384,35 @@ export default function NuevaVentaView() {
           </div>
 
           {metodoSeleccionado?.requiere_comp && (
-            <div className="alert alert-info" style={{ fontSize: 12 }}>
-              <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div className="alert alert-info u-alert-sm">
+              <Info size={14} className="u-icon-inline" />
               <span>Este método pide comprobante. Se sube después de cobrar (pantalla de comprobantes, aún no construida).</span>
             </div>
           )}
 
           <input
-            className="field-input"
+            className="field-input nv-observacion-input"
             placeholder="Observación de la venta..."
             value={observacion}
             onChange={(e) => setObservacion(e.target.value)}
-            style={{ marginBottom: 10 }}
           />
 
           {error && (
-            <div className="alert alert-danger" style={{ fontSize: 12.5 }}>
-              <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div className="alert alert-danger u-alert-xs">
+              <AlertTriangle size={14} className="u-icon-inline" />
               <span>{error}</span>
             </div>
           )}
 
           <button
-            className="btn btn-primary"
-            style={{ width: "100%", justifyContent: "center", marginBottom: 8 }}
+            className="btn btn-primary u-btn-block-mb"
             disabled={cart.length === 0 || !metodoPagoId || cobrando}
             onClick={cobrar}
           >
             {cobrando ? "Procesando..." : `Cobrar ${formatMoney(total)}`}
           </button>
           <button
-            className="btn btn-danger-ghost"
-            style={{ width: "100%", justifyContent: "center" }}
+            className="btn btn-danger-ghost u-btn-block"
             disabled={cart.length === 0 || cobrando}
             onClick={cancelarVenta}
           >

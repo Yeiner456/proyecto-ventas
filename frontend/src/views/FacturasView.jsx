@@ -9,6 +9,7 @@ import {
   sucursales as sucursalesSeed,
   usuarios as usuariosSeed,
 } from "../mocks/seedData";
+import "../styles/FacturasView.css";
 
 /* ============================================================================
  * FACTURAS — Vista de solo lectura
@@ -55,19 +56,6 @@ function formatMoney(n) {
   return `$${Number(n).toLocaleString("es-CO")}`;
 }
 
-const styles = `
-.fv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
-.fv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 560px; line-height: 1.5; }
-.fv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
-.fv-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
-.fv-search { position: relative; flex: 1; min-width: 220px; }
-.fv-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
-.fv-search input { padding-left: 36px; }
-.fv-date { max-width: 170px; }
-.fv-detalle-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-family: 'Roboto', sans-serif; font-size: 13px; }
-.fv-detalle-row:last-child { border-bottom: none; }
-.fv-total-row { display: flex; justify-content: space-between; padding-top: 10px; margin-top: 4px; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; }
-`;
 
 function FacturaDetalleModal({ factura, onClose }) {
   const venta = ventaDe(factura.venta_id);
@@ -78,14 +66,14 @@ function FacturaDetalleModal({ factura, onClose }) {
         <div className="modal-header">
           <div>
             <h3 className="modal-title text-mono">{factura.numero_factura}</h3>
-            <p className="field-help" style={{ marginTop: 4 }}>{formatFecha(factura.created_at)}</p>
+            <p className="field-help fv-modal-fecha">{formatFecha(factura.created_at)}</p>
           </div>
           <button className="modal-close" onClick={onClose}>
             <X size={18} />
           </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16, fontFamily: "'Roboto', sans-serif", fontSize: 13 }}>
+        <div className="fv-detalle-grid">
           <div>
             <div className="field-help">Sucursal</div>
             {nombreSucursal(factura.sucursal_id)}
@@ -106,7 +94,7 @@ function FacturaDetalleModal({ factura, onClose }) {
 
         {venta ? (
           <div>
-            <div className="field-help" style={{ marginBottom: 8, textTransform: "uppercase", letterSpacing: ".03em" }}>
+            <div className="field-help fv-productos-label">
               Productos
             </div>
             {venta.detalles.map((d, i) => (
@@ -122,7 +110,7 @@ function FacturaDetalleModal({ factura, onClose }) {
           </div>
         ) : (
           <div className="alert alert-warning">
-            <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={16} className="u-icon-inline" />
             <span>No se encontró la venta asociada a esta factura.</span>
           </div>
         )}
@@ -172,7 +160,6 @@ export default function FacturasView() {
 
   return (
     <div>
-      <style>{styles}</style>
       <div className="breadcrumb">› Facturas</div>
       <div className="fv-header">
         <div>
@@ -236,8 +223,8 @@ export default function FacturasView() {
               visibles.map((f) => (
                 <tr key={f.id_factura}>
                   <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <Receipt size={14} style={{ color: "var(--sena-green-dark)" }} />
+                    <div className="fv-numero-cell">
+                      <Receipt size={14} className="fv-numero-icon" />
                       <span className="text-mono">{f.numero_factura}</span>
                     </div>
                   </td>

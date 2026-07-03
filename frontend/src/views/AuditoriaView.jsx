@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { ClipboardList, X, AlertTriangle, Search } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { auditoriaLogs as auditoriaLogsSeed, usuarios as usuariosSeed, sucursales as sucursalesSeed, nombreSucursal } from "../mocks/seedData";
+import "../styles/AuditoriaView.css";
 
 /* ============================================================================
  * AUDITORÍA — Vista de solo lectura
@@ -38,14 +39,6 @@ const ACCION_LABEL = {
   login: "Inició sesión",
 };
 
-const styles = `
-.av-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
-.av-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
-.av-select { max-width: 200px; }
-.av-date { max-width: 160px; }
-.av-diff { background: #FAFAFA; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Roboto Mono', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
-.av-diff-label { font-family: 'Roboto', sans-serif; font-size: 11px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .03em; margin: 12px 0 6px 0; }
-`;
 
 function DetalleModal({ log, onClose }) {
   return (
@@ -58,7 +51,7 @@ function DetalleModal({ log, onClose }) {
           </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8, fontFamily: "'Roboto', sans-serif", fontSize: 13 }}>
+        <div className="av-detalle-grid">
           <div><div className="field-help">Usuario</div>{nombreUsuario(log.usuario_id)}</div>
           <div><div className="field-help">Sucursal</div>{log.sucursal_id ? nombreSucursal(log.sucursal_id) : "—"}</div>
           <div><div className="field-help">Fecha</div>{formatFecha(log.created_at)}</div>
@@ -117,8 +110,8 @@ export default function AuditoriaView() {
       <div>
         <div className="breadcrumb">› Auditoría</div>
         <h1 className="page-title">Auditoría</h1>
-        <div className="alert alert-danger" style={{ maxWidth: 480 }}>
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div className="alert alert-danger u-max-480">
+          <AlertTriangle size={16} className="u-icon-inline" />
           <span>No tienes permisos para ver la auditoría (AuditoriaLogPolicy::viewAny).</span>
         </div>
       </div>
@@ -127,21 +120,20 @@ export default function AuditoriaView() {
 
   return (
     <div>
-      <style>{styles}</style>
       <div className="breadcrumb">› Auditoría</div>
       <div className="av-header">
         <div>
           <h1 className="page-title">Auditoría</h1>
-          <p className="text-muted" style={{ maxWidth: 560 }}>
+          <p className="text-muted av-subtitle">
             {actorEsAdminGeneral(actor) ? "Bitácora de todas las sucursales." : `Bitácora de ${actor.sucursal}.`} Solo lectura — se llena sola desde las acciones del sistema.
           </p>
         </div>
       </div>
 
       <div className="av-toolbar">
-        <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
-          <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)" }} />
-          <input className="field-input" style={{ paddingLeft: 36 }} placeholder="Buscar por usuario..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+        <div className="av-search-wrap">
+          <Search size={15} className="av-search-icon" />
+          <input className="field-input"  placeholder="Buscar por usuario..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
         </div>
         <select className="field-select av-select" value={filtroAccion} onChange={(e) => setFiltroAccion(e.target.value)}>
           <option value="">Todas las acciones</option>
@@ -176,8 +168,8 @@ export default function AuditoriaView() {
                   <td className="text-mono">{formatFecha(l.created_at)}</td>
                   <td>{nombreUsuario(l.usuario_id)}</td>
                   <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <ClipboardList size={13} style={{ color: "var(--sena-green-dark)" }} />
+                    <div className="av-action-cell">
+                      <ClipboardList size={13} className="av-action-icon" />
                       {ACCION_LABEL[l.accion] ?? l.accion}
                     </div>
                   </td>

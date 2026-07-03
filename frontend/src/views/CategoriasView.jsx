@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { Tags, Plus, Pencil, Trash2, X, AlertTriangle, Info, Lock } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { sucursales as sucursalesSeed, categorias as categoriasSeed, productos as productosSeed, nombreSucursal } from "../mocks/seedData";
+import "../styles/CategoriasView.css";
 
 /* ============================================================================
  * CATEGORÍAS DE PRODUCTO — Vista CRUD
@@ -52,11 +53,6 @@ function categoriaVisible(actor, categoria) {
   return categoria.sucursal_id === sucursalActorId;
 }
 
-const styles = `
-.cv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
-.cv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 560px; line-height: 1.5; }
-.cv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
-`;
 
 function FormModal({ actor, initial, onCancel, onSubmit, saving, existentes }) {
   const isEdit = Boolean(initial);
@@ -115,7 +111,7 @@ function FormModal({ actor, initial, onCancel, onSubmit, saving, existentes }) {
               ))}
             </select>
           ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: 12.5 }}>
+            <div className="u-lock-note">
               <Lock size={13} /> {actor.sucursal}
             </div>
           )}
@@ -149,12 +145,12 @@ function ConfirmDeleteModal({ categoria, onCancel, onConfirm, deleting, error })
             <X size={18} />
           </button>
         </div>
-        <p style={{ fontFamily: "'Roboto', sans-serif", fontSize: 14, lineHeight: 1.5 }}>
+        <p className="u-confirm-text">
           ¿Seguro que quieres eliminar <strong>{categoria.nombre}</strong>?
         </p>
         {error && (
           <div className="alert alert-danger">
-            <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={16} className="u-icon-inline" />
             <span>{error}</span>
           </div>
         )}
@@ -230,8 +226,8 @@ export default function CategoriasView() {
       <div>
         <div className="breadcrumb">› Categorías</div>
         <h1 className="page-title">Categorías</h1>
-        <div className="alert alert-danger" style={{ maxWidth: 480 }}>
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div className="alert alert-danger u-max-480">
+          <AlertTriangle size={16} className="u-icon-inline" />
           <span>No tienes permisos para gestionar categorías.</span>
         </div>
       </div>
@@ -240,7 +236,6 @@ export default function CategoriasView() {
 
   return (
     <div>
-      <style>{styles}</style>
       <div className="breadcrumb">› Categorías</div>
       <div className="cv-header">
         <div>
@@ -280,15 +275,15 @@ export default function CategoriasView() {
               visibles.map((c) => (
                 <tr key={c.id_categoria}>
                   <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <Tags size={14} style={{ color: "var(--sena-green-dark)" }} />
+                    <div className="cv-nombre-cell">
+                      <Tags size={14} className="cv-nombre-icon" />
                       {c.nombre}
                     </div>
                   </td>
                   {actorEsAdminGeneral(actor) && <td>{nombreSucursal(c.sucursal_id)}</td>}
                   <td className="text-mono">{conteoProductos(c.id_categoria)}</td>
                   <td>
-                    <div style={{ display: "flex", gap: 6 }}>
+                    <div className="cv-actions-cell">
                       <button className="btn btn-outline btn-sm" onClick={() => setFormModal({ mode: "edit", categoria: c })}>
                         <Pencil size={14} />
                       </button>
@@ -332,7 +327,7 @@ export default function CategoriasView() {
       )}
 
       {toast && (
-        <div style={{ position: "fixed", bottom: 24, right: 24, background: "var(--ink)", color: "var(--white)", padding: "12px 18px", borderRadius: 8, fontFamily: "'Roboto', sans-serif", fontSize: 13.5, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>
+        <div className="toast">
           <Info size={15} />
           {toast}
         </div>

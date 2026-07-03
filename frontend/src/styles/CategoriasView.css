@@ -1,0 +1,14 @@
+/* ============================================================================
+ * CategoriasView.css
+ * ==========================================================================*/
+
+.cv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+.cv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 560px; line-height: 1.5; }
+.cv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+
+/* Nombre de categoría en la tabla (ícono + texto) */
+.cv-nombre-cell { display: flex; align-items: center; gap: 8px; }
+.cv-nombre-icon { color: var(--sena-green-dark); }
+
+/* Fila de acciones (editar / eliminar) */
+.cv-actions-cell { display: flex; gap: 6px; }

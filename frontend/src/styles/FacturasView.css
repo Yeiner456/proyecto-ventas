@@ -1,0 +1,28 @@
+/* ============================================================================
+ * FacturasView.css
+ * ==========================================================================*/
+
+.fv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+.fv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 560px; line-height: 1.5; }
+.fv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.fv-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.fv-search { position: relative; flex: 1; min-width: 220px; }
+.fv-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
+.fv-search input { padding-left: 36px; }
+.fv-date { max-width: 170px; }
+.fv-detalle-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-family: 'Roboto', sans-serif; font-size: 13px; }
+.fv-detalle-row:last-child { border-bottom: none; }
+.fv-total-row { display: flex; justify-content: space-between; padding-top: 10px; margin-top: 4px; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; }
+
+/* Fecha bajo el número de factura en el header del modal */
+.fv-modal-fecha { margin-top: 4px; }
+
+/* Grid de datos del detalle (Sucursal / Cajero / Método / Venta asociada) */
+.fv-detalle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; font-family: 'Roboto', sans-serif; font-size: 13px; }
+
+/* Etiqueta "PRODUCTOS" en mayúsculas dentro del modal */
+.fv-productos-label { margin-bottom: 8px; text-transform: uppercase; letter-spacing: .03em; }
+
+/* Celda de N° de factura en la tabla (ícono + texto mono) */
+.fv-numero-cell { display: flex; align-items: center; gap: 8px; }
+.fv-numero-icon { color: var(--sena-green-dark); }
