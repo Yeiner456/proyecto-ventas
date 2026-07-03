@@ -13,9 +13,7 @@ import VentasView from "./views/VentasView";
 import MetodosPagoView from "./views/MetodosPagoView";
 import NotificacionesView from "./views/NotificacionesView";
 import AuditoriaView from "./views/AuditoriaView";
-
-// TODO: importar cuando se construya.
-// import DashboardView from "./views/DashboardView";
+import DashboardView from "./views/DashboardView";
 
 export default function App() {
   return (
@@ -23,7 +21,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<AppLayout />}>
-            <Route index element={<Navigate to="/roles" replace />} />
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardView />} />
             <Route path="/roles" element={<RolesView />} />
             <Route path="/usuarios" element={<UsuariosView />} />
             <Route path="/sucursales" element={<SucursalesView />} />
@@ -36,7 +35,6 @@ export default function App() {
             <Route path="/metodos-pago" element={<MetodosPagoView />} />
             <Route path="/notificaciones" element={<NotificacionesView />} />
             <Route path="/auditoria" element={<AuditoriaView />} />
-            {/* <Route path="/dashboard" element={<DashboardView />} /> */}
           </Route>
         </Routes>
       </BrowserRouter>
