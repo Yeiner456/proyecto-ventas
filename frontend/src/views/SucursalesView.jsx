@@ -1,0 +1,413 @@
+import React, { useState, useMemo } from "react";
+import {
+  Building2,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  AlertTriangle,
+  Info,
+  Lock,
+  Phone,
+  Mail,
+  MapPin,
+} from "lucide-react";
+import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
+import { sucursales as sucursalesSeed, usuarios as usuariosSeed } from "../mocks/seedData";
+
+/* ============================================================================
+ * SUCURSALES — Vista CRUD
+ * ----------------------------------------------------------------------------
+ * Contrato real (backend/routes/api.php):
+ *   GET    /api/sucursales              -> listar
+ *   POST   /api/sucursales              -> crear
+ *   PUT    /api/sucursales/{id_sucursal}-> editar
+ *   DELETE /api/sucursales/{id_sucursal}-> eliminar (409 si tiene datos asociados)
+ *
+ * SucursalPolicy (ver backend/app/Policies/SucursalPolicy.php):
+ *   - viewAny/view -> TRUE para cualquier usuario autenticado (las
+ *     necesitan para selects, p.ej. al crear un usuario).
+ *   - create/update/delete -> false explícito; solo admin_general puede
+ *     (vía before()).
+ * Por eso esta vista NO se bloquea por completo para otros roles como en
+ * UsuariosView — se degrada a solo lectura, que es lo que la Policy
+ * realmente permite. La Sidebar ya la oculta para no-admin_general, pero
+ * si alguien llega por URL directa, ve la lista sin poder mutarla.
+ * ==========================================================================*/
+
+const wait = (ms = 400) => new Promise((res) => setTimeout(res, ms));
+
+const api = {
+  async listar() {
+    await wait();
+    return sucursalesSeed;
+  },
+  async crear(payload) {
+    await wait();
+    return { id_sucursal: Date.now(), activa: true, ...payload };
+  },
+  async editar(id_sucursal, payload) {
+    await wait();
+    return { id_sucursal, ...payload };
+  },
+  async eliminar(id_sucursal) {
+    await wait(250);
+    const tieneDatos = usuariosSeed.some((u) => u.sucursal_id === id_sucursal);
+    if (tieneDatos) {
+      const error = new Error(
+        "No se puede eliminar la sucursal porque tiene datos asociados (usuarios, productos o ventas)."
+      );
+      error.status = 409;
+      throw error;
+    }
+    return true;
+  },
+};
+
+const styles = `
+.sv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+.sv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 560px; line-height: 1.5; }
+.sv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.sv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.sv-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.sv-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.sv-icon { width: 38px; height: 38px; border-radius: 9px; background: var(--green-soft); color: var(--sena-green-dark); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sv-name { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; margin: 0; }
+.sv-meta { display: flex; flex-direction: column; gap: 6px; }
+.sv-meta-row { display: flex; align-items: center; gap: 8px; font-family: 'Roboto', sans-serif; font-size: 13px; color: var(--text-secondary); }
+.sv-actions { display: flex; gap: 8px; margin-top: auto; }
+.sv-readonly-note { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+`;
+
+function SucursalCard({ sucursal, puedeEditar, onEdit, onDelete }) {
+  return (
+    <div className="sv-card">
+      <div className="sv-card-top">
+        <div style={{ display: "flex", gap: 12 }}>
+          <div className="sv-icon">
+            <Building2 size={18} />
+          </div>
+          <p className="sv-name">{sucursal.nombre}</p>
+        </div>
+        <span className={`badge ${sucursal.activa ? "badge-success" : "badge-neutral"}`}>
+          {sucursal.activa ? "Activa" : "Inactiva"}
+        </span>
+      </div>
+
+      <div className="sv-meta">
+        {sucursal.direccion && (
+          <div className="sv-meta-row">
+            <MapPin size={13} /> {sucursal.direccion}
+          </div>
+        )}
+        {sucursal.telefono && (
+          <div className="sv-meta-row">
+            <Phone size={13} /> {sucursal.telefono}
+          </div>
+        )}
+        {sucursal.email && (
+          <div className="sv-meta-row">
+            <Mail size={13} /> {sucursal.email}
+          </div>
+        )}
+      </div>
+
+      {puedeEditar ? (
+        <div className="sv-actions">
+          <button className="btn btn-outline btn-sm" onClick={() => onEdit(sucursal)}>
+            <Pencil size={14} /> Editar
+          </button>
+          <button
+            className="btn btn-danger-ghost btn-sm"
+            onClick={() => onDelete(sucursal)}
+            style={{ marginLeft: "auto" }}
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ) : (
+        <div className="sv-readonly-note">
+          <Lock size={12} /> Solo admin_general puede editar sucursales
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SucursalFormModal({ initial, onCancel, onSubmit, saving, existentes }) {
+  const isEdit = Boolean(initial);
+  const [nombre, setNombre] = useState(initial?.nombre ?? "");
+  const [direccion, setDireccion] = useState(initial?.direccion ?? "");
+  const [telefono, setTelefono] = useState(initial?.telefono ?? "");
+  const [email, setEmail] = useState(initial?.email ?? "");
+  const [activa, setActiva] = useState(initial?.activa ?? true);
+  const [touched, setTouched] = useState(false);
+
+  const nombreValido = nombre.trim().length >= 3;
+  const nombreDuplicado = existentes.some(
+    (s) => s.nombre.toLowerCase() === nombre.trim().toLowerCase() && s.id_sucursal !== initial?.id_sucursal
+  );
+  const emailValido = email.trim() === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  const formValido = nombreValido && !nombreDuplicado && emailValido;
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    setTouched(true);
+    if (!formValido) return;
+    onSubmit({
+      nombre: nombre.trim(),
+      direccion: direccion.trim() || null,
+      telefono: telefono.trim() || null,
+      email: email.trim() || null,
+      activa,
+    });
+  }
+
+  return (
+    <div className="modal-overlay" onMouseDown={onCancel}>
+      <form className="modal modal-wide" onMouseDown={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <div className="modal-header">
+          <h3 className="modal-title">{isEdit ? "Editar sucursal" : "Nueva sucursal"}</h3>
+          <button type="button" className="modal-close" onClick={onCancel}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="field">
+          <label className="field-label">Nombre</label>
+          <input className="field-input" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+          {touched && !nombreValido && <p className="field-help error">El nombre debe tener al menos 3 caracteres.</p>}
+          {touched && nombreValido && nombreDuplicado && (
+            <p className="field-help error">Ya existe una sucursal con ese nombre.</p>
+          )}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div className="field">
+            <label className="field-label">Teléfono</label>
+            <input className="field-input" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+          </div>
+          <div className="field">
+            <label className="field-label">Email</label>
+            <input className="field-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            {touched && !emailValido && <p className="field-help error">Ingresa un email válido.</p>}
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="field-label">Dirección</label>
+          <input className="field-input" value={direccion} onChange={(e) => setDireccion(e.target.value)} />
+        </div>
+
+        <div className="field">
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" id="sv-activa" checked={activa} onChange={(e) => setActiva(e.target.checked)} />
+            <label htmlFor="sv-activa" className="field-label" style={{ margin: 0 }}>
+              Sucursal activa
+            </label>
+          </div>
+        </div>
+
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={onCancel}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear sucursal"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ConfirmDeleteModal({ sucursal, onCancel, onConfirm, deleting, error }) {
+  return (
+    <div className="modal-overlay" onMouseDown={onCancel}>
+      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">Eliminar sucursal</h3>
+          <button className="modal-close" onClick={onCancel}>
+            <X size={18} />
+          </button>
+        </div>
+        <p style={{ fontFamily: "'Roboto', sans-serif", fontSize: 14, lineHeight: 1.5 }}>
+          ¿Seguro que quieres eliminar <strong>{sucursal.nombre}</strong>? Esta acción no se puede deshacer.
+        </p>
+        {error && (
+          <div className="alert alert-danger">
+            <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{error}</span>
+          </div>
+        )}
+        <div className="modal-actions">
+          <button className="btn btn-outline" onClick={onCancel}>
+            Cancelar
+          </button>
+          <button className="btn btn-danger" onClick={onConfirm} disabled={deleting}>
+            {deleting ? "Eliminando..." : "Eliminar sucursal"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function SucursalesView() {
+  const { usuario: actor } = useAuth();
+  const puedeEditar = actorEsAdminGeneral(actor);
+
+  const [sucursales, setSucursales] = useState(sucursalesSeed);
+  const [formModal, setFormModal] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const stats = useMemo(
+    () => ({
+      total: sucursales.length,
+      activas: sucursales.filter((s) => s.activa).length,
+      inactivas: sucursales.filter((s) => !s.activa).length,
+    }),
+    [sucursales]
+  );
+
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  async function handleSubmit(payload) {
+    setSaving(true);
+    try {
+      if (formModal.mode === "edit") {
+        const actualizada = await api.editar(formModal.sucursal.id_sucursal, payload);
+        setSucursales((prev) =>
+          prev.map((s) => (s.id_sucursal === actualizada.id_sucursal ? { ...s, ...actualizada } : s))
+        );
+        showToast("Sucursal actualizada correctamente.");
+      } else {
+        const creada = await api.crear(payload);
+        setSucursales((prev) => [...prev, creada]);
+        showToast("Sucursal creada correctamente.");
+      }
+      setFormModal(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.eliminar(deleteTarget.id_sucursal);
+      setSucursales((prev) => prev.filter((s) => s.id_sucursal !== deleteTarget.id_sucursal));
+      setDeleteTarget(null);
+      showToast("Sucursal eliminada.");
+    } catch (err) {
+      setDeleteError(err.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div>
+      <style>{styles}</style>
+
+      <div className="breadcrumb">› Sucursales</div>
+      <div className="sv-header">
+        <div>
+          <h1 className="page-title">Sucursales</h1>
+          <p className="sv-subtitle">
+            {puedeEditar
+              ? "Administra las sedes del sistema."
+              : "Consulta las sedes del sistema. Solo admin_general puede crear, editar o eliminar sucursales."}
+          </p>
+        </div>
+        {puedeEditar && (
+          <button className="btn btn-primary" onClick={() => setFormModal({ mode: "create" })}>
+            <Plus size={16} /> Nueva sucursal
+          </button>
+        )}
+      </div>
+
+      <div className="sv-stats">
+        <div className="stat-card">
+          <div className="stat-label">Sucursales</div>
+          <div className="stat-value">{stats.total}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Activas</div>
+          <div className="stat-value">{stats.activas}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Inactivas</div>
+          <div className="stat-value">{stats.inactivas}</div>
+        </div>
+      </div>
+
+      <div className="sv-grid">
+        {sucursales.map((s) => (
+          <SucursalCard
+            key={s.id_sucursal}
+            sucursal={s}
+            puedeEditar={puedeEditar}
+            onEdit={(s) => setFormModal({ mode: "edit", sucursal: s })}
+            onDelete={(s) => {
+              setDeleteTarget(s);
+              setDeleteError(null);
+            }}
+          />
+        ))}
+      </div>
+
+      {formModal && (
+        <SucursalFormModal
+          initial={formModal.mode === "edit" ? formModal.sucursal : null}
+          saving={saving}
+          existentes={sucursales}
+          onCancel={() => setFormModal(null)}
+          onSubmit={handleSubmit}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDeleteModal
+          sucursal={deleteTarget}
+          deleting={deleting}
+          error={deleteError}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={handleDelete}
+        />
+      )}
+
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            right: 24,
+            background: "var(--ink)",
+            color: "var(--white)",
+            padding: "12px 18px",
+            borderRadius: 8,
+            fontFamily: "'Roboto', sans-serif",
+            fontSize: 13.5,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            boxShadow: "0 8px 24px rgba(0,0,0,.25)",
+          }}
+        >
+          <Info size={15} />
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
