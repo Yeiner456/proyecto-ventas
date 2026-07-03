@@ -123,6 +123,12 @@ export const metodosPago = [
 // generada. Cuando construyamos VentasView completo, este arreglo pasa a
 // tener más entradas para probar los demás estados (pendiente,
 // en_preparacion, listo_para_entregar, cancelado).
+// id_venta:1 es la única venta REAL de DemoVentaSeeder.php. Las demás
+// (2, 3, 4) NO existen en el backend sembrado — las agrego únicamente
+// para poder mostrar en la UI los otros estados de Venta::ESTADOS
+// (pendiente, en_preparacion, cancelado) sin tener que operar el POS
+// varias veces a mano. Bórralas de aquí cuando haya API real: allí el
+// registro reflejará lo que de verdad exista en la base de datos.
 export const ventas = [
   {
     id_venta: 1,
@@ -138,6 +144,43 @@ export const ventas = [
       { producto_id: 5, nombre: "Hamburguesa clásica", cantidad: 1, precio_unitario_venta: 15000 },
     ],
   },
+  // --- A partir de aquí: solo demo de UI, no existen en el backend ---
+  {
+    id_venta: 2,
+    sucursal_id: 1,
+    cajero_id: 5,
+    estado: "pendiente",
+    metodo_pago_id: null,
+    total: 4500,
+    observacion: null,
+    created_at: "2026-07-01T09:40:00",
+    detalles: [{ producto_id: 7, nombre: "Café americano", cantidad: 1, precio_unitario_venta: 4500 }],
+  },
+  {
+    id_venta: 3,
+    sucursal_id: 1,
+    cajero_id: 5,
+    estado: "en_preparacion",
+    metodo_pago_id: null,
+    total: 7000,
+    observacion: null,
+    created_at: "2026-07-01T10:05:00",
+    detalles: [
+      { producto_id: 2, nombre: "Agua 600ml", cantidad: 2, precio_unitario_venta: 2500 },
+      { producto_id: 4, nombre: "Chocolatina", cantidad: 1, precio_unitario_venta: 2000 },
+    ],
+  },
+  {
+    id_venta: 4,
+    sucursal_id: 1,
+    cajero_id: 6,
+    estado: "cancelado",
+    metodo_pago_id: 1,
+    total: 4000,
+    observacion: "Cliente se arrepintió",
+    created_at: "2026-06-30T16:20:00",
+    detalles: [{ producto_id: 3, nombre: "Papas fritas 45g", cantidad: 1, precio_unitario_venta: 4000 }],
+  },
 ];
 
 // Coincide con FacturaService::generarParaVenta() — numeración
@@ -152,6 +195,87 @@ export const facturas = [
     total: 22000,
     pdf_ruta: null, // el backend aún no expone un endpoint de descarga (ver nota en FacturasView)
     created_at: "2026-06-20T10:16:00",
+  },
+];
+
+// Demo de UI — replican los eventos que InventarioService/VentaController
+// generarían automáticamente a partir de los datos ya sembrados
+// (Papas fritas con stock bajo, la cancelación de la venta #4, etc.)
+// No existen literalmente en el backend porque nunca se corrió ese flujo
+// completo contra una base de datos real.
+export const notificaciones = [
+  {
+    id_notificacion: 1,
+    sucursal_id: 1,
+    usuario_id: null, // null = para todos los admin_sucursal de esa sucursal
+    tipo: "stock_bajo",
+    mensaje: 'El producto "Papas fritas 45g" tiene stock bajo (5 unidades, mínimo 10).',
+    leida: false,
+    referencia_id: 3,
+    referencia_tipo: "producto",
+    created_at: "2026-07-01T08:30:00",
+  },
+  {
+    id_notificacion: 2,
+    sucursal_id: 1,
+    usuario_id: null,
+    tipo: "venta_cancelada",
+    mensaje: "La venta #4 fue cancelada. Motivo: Cliente se arrepintió.",
+    leida: true,
+    referencia_id: 4,
+    referencia_tipo: "venta",
+    created_at: "2026-06-30T16:21:00",
+  },
+];
+
+export const auditoriaLogs = [
+  {
+    id_auditoria: 1,
+    usuario_id: 5,
+    sucursal_id: 1,
+    accion: "crear_venta",
+    tabla_afectada: "ventas",
+    registro_id: 1,
+    datos_anteriores: null,
+    datos_nuevos: { estado: "pendiente", total: 0 },
+    ip_address: "192.168.1.20",
+    created_at: "2026-06-20T10:15:00",
+  },
+  {
+    id_auditoria: 2,
+    usuario_id: 5,
+    sucursal_id: 1,
+    accion: "cambiar_estado_venta",
+    tabla_afectada: "ventas",
+    registro_id: 1,
+    datos_anteriores: { estado: "pendiente" },
+    datos_nuevos: { estado: "pagado", motivo: null },
+    ip_address: "192.168.1.20",
+    created_at: "2026-06-20T10:16:00",
+  },
+  {
+    id_auditoria: 3,
+    usuario_id: 6,
+    sucursal_id: 1,
+    accion: "cambiar_estado_venta",
+    tabla_afectada: "ventas",
+    registro_id: 4,
+    datos_anteriores: { estado: "pagado" },
+    datos_nuevos: { estado: "cancelado", motivo: "Cliente se arrepintió" },
+    ip_address: "192.168.1.21",
+    created_at: "2026-06-30T16:20:00",
+  },
+  {
+    id_auditoria: 4,
+    usuario_id: 3,
+    sucursal_id: 1,
+    accion: "ajustar_inventario",
+    tabla_afectada: "inventario",
+    registro_id: 3,
+    datos_anteriores: { cantidad: 20 },
+    datos_nuevos: { cantidad: 5, observacion: "Conteo físico semanal" },
+    ip_address: "192.168.1.15",
+    created_at: "2026-06-29T18:00:00",
   },
 ];
 
