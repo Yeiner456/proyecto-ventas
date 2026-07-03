@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { Bell, Check, Trash2, AlertTriangle, PackageX, Ban } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { notificaciones as notificacionesSeed, sucursales as sucursalesSeed } from "../mocks/seedData";
+import "../styles/NotificacionesView.css";
 
 /* ============================================================================
  * NOTIFICACIONES — Vista de solo gestión (sin creación manual)
@@ -38,17 +39,6 @@ function formatFecha(iso) {
   return new Date(iso).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
 }
 
-const styles = `
-.ntv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
-.ntv-toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; }
-.ntv-item { display: flex; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); align-items: flex-start; }
-.ntv-item:last-child { border-bottom: none; }
-.ntv-item.no-leida { background: #FAFCF8; }
-.ntv-icon { width: 34px; height: 34px; border-radius: 8px; background: #FFFBEB; color: var(--warning); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.ntv-msg { font-family: 'Roboto', sans-serif; font-size: 13.5px; line-height: 1.5; }
-.ntv-meta { font-family: 'Roboto', sans-serif; font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; }
-.ntv-actions { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }
-`;
 
 export default function NotificacionesView() {
   const { usuario: actor } = useAuth();
@@ -90,23 +80,22 @@ export default function NotificacionesView() {
 
   return (
     <div>
-      <style>{styles}</style>
       <div className="breadcrumb">› Notificaciones</div>
       <div className="ntv-header">
         <div>
           <h1 className="page-title">Notificaciones</h1>
-          <p className="text-muted" style={{ maxWidth: 560 }}>
+          <p className="text-muted ntv-subtitle">
             Se generan automáticamente por el sistema (ej. stock bajo) — no se crean manualmente aquí.
           </p>
         </div>
-        <div className="stat-card" style={{ minWidth: 140 }}>
+        <div className="stat-card ntv-stat-card">
           <div className="stat-label">Sin leer</div>
-          <div className="stat-value" style={{ color: noLeidas > 0 ? "var(--warning)" : "inherit" }}>{noLeidas}</div>
+          <div className={`stat-value${noLeidas > 0 ? " u-value-warning" : ""}`}>{noLeidas}</div>
         </div>
       </div>
 
       <div className="ntv-toolbar">
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "'Roboto', sans-serif", fontSize: 13 }}>
+        <label className="ntv-checkbox-label">
           <input type="checkbox" checked={soloNoLeidas} onChange={(e) => setSoloNoLeidas(e.target.checked)} />
           Solo no leídas
         </label>
@@ -114,7 +103,7 @@ export default function NotificacionesView() {
 
       <div className="data-table-card">
         {visibles.length === 0 ? (
-          <div style={{ padding: 40, textAlign: "center", color: "var(--text-secondary)", fontFamily: "'Roboto', sans-serif", fontSize: 13 }}>
+          <div className="ntv-empty">
             No hay notificaciones{soloNoLeidas ? " sin leer" : ""}.
           </div>
         ) : (
@@ -125,7 +114,7 @@ export default function NotificacionesView() {
                 <div className="ntv-icon">
                   <Icono size={16} />
                 </div>
-                <div style={{ flex: 1 }}>
+                <div className="ntv-item-body">
                   <div className="ntv-msg">{n.mensaje}</div>
                   <div className="ntv-meta">{formatFecha(n.created_at)}{n.usuario_id === null && " · Para todos los admins de la sucursal"}</div>
                 </div>

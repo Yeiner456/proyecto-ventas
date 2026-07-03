@@ -17,6 +17,7 @@ import {
   nombreRol,
   nombreSucursal,
 } from "../mocks/seedData";
+import "../styles/UsuariosView.css";
 
 /* ============================================================================
  * USUARIOS — Vista CRUD
@@ -87,20 +88,6 @@ function puedeEliminar(actor, usuario, actorIdUsuario) {
   return usuarioVisibleParaActor(actor, usuario);
 }
 
-const styles = `
-.uv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
-.uv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 560px; line-height: 1.5; }
-.uv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
-.uv-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
-.uv-search { position: relative; flex: 1; min-width: 220px; }
-.uv-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
-.uv-search input { padding-left: 36px; }
-.uv-select { max-width: 200px; }
-.uv-row-actions { display: flex; gap: 6px; }
-.uv-name-cell { display: flex; flex-direction: column; }
-.uv-you-tag { font-size: 11px; color: var(--sena-green-dark); font-weight: 500; }
-.uv-lock-note { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; margin-top: 5px; }
-`;
 
 function FieldWrap({ children }) {
   return <div className="field">{children}</div>;
@@ -167,7 +154,7 @@ function UserFormModal({ actor, initial, onCancel, onSubmit, saving, existentes 
           </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div className="uv-form-grid-2">
           <FieldWrap>
             <label className="field-label">Nombre completo</label>
             <input className="field-input" value={nombre} onChange={(e) => setNombre(e.target.value)} />
@@ -184,7 +171,7 @@ function UserFormModal({ actor, initial, onCancel, onSubmit, saving, existentes 
           </FieldWrap>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div className="uv-form-grid-2">
           <FieldWrap>
             <label className="field-label">Rol</label>
             <select className="field-select" value={rolId} onChange={(e) => setRolId(e.target.value)}>
@@ -246,9 +233,9 @@ function UserFormModal({ actor, initial, onCancel, onSubmit, saving, existentes 
         </FieldWrap>
 
         <FieldWrap>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="uv-checkbox-row">
             <input type="checkbox" id="uv-activo" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
-            <label htmlFor="uv-activo" className="field-label" style={{ margin: 0 }}>
+            <label htmlFor="uv-activo" className="field-label u-label-inline">
               Usuario activo
             </label>
           </div>
@@ -277,12 +264,12 @@ function ConfirmDeleteModal({ usuario, onCancel, onConfirm, deleting, error }) {
             <X size={18} />
           </button>
         </div>
-        <p style={{ fontFamily: "'Roboto', sans-serif", fontSize: 14, lineHeight: 1.5 }}>
+        <p className="u-confirm-text">
           ¿Seguro que quieres eliminar a <strong>{usuario.nombre}</strong>? Esta acción no se puede deshacer.
         </p>
         {error && (
           <div className="alert alert-danger">
-            <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={16} className="u-icon-inline" />
             <span>{error}</span>
           </div>
         )}
@@ -377,11 +364,10 @@ export default function UsuariosView() {
   if (!autorizado) {
     return (
       <div>
-        <style>{styles}</style>
         <div className="breadcrumb">› Usuarios</div>
         <h1 className="page-title">Usuarios</h1>
-        <div className="alert alert-danger" style={{ maxWidth: 480 }}>
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div className="alert alert-danger u-max-480">
+          <AlertTriangle size={16} className="u-icon-inline" />
           <span>No tienes permisos para gestionar usuarios (UsuarioPolicy::viewAny).</span>
         </div>
       </div>
@@ -390,8 +376,6 @@ export default function UsuariosView() {
 
   return (
     <div>
-      <style>{styles}</style>
-
       <div className="breadcrumb">› Usuarios</div>
       <div className="uv-header">
         <div>
@@ -536,23 +520,7 @@ export default function UsuariosView() {
       )}
 
       {toast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            background: "var(--ink)",
-            color: "var(--white)",
-            padding: "12px 18px",
-            borderRadius: 8,
-            fontFamily: "'Roboto', sans-serif",
-            fontSize: 13.5,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            boxShadow: "0 8px 24px rgba(0,0,0,.25)",
-          }}
-        >
+        <div className="toast">
           <Info size={15} />
           {toast}
         </div>

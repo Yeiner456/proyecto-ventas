@@ -1,0 +1,29 @@
+/* ============================================================================
+ * DashboardView.css
+ * ==========================================================================*/
+
+.dv-header { margin-bottom: 22px; }
+.dv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.dv-kpi { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.dv-kpi-top { display: flex; justify-content: space-between; align-items: center; }
+.dv-kpi-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--green-soft); color: var(--sena-green-dark); display: flex; align-items: center; justify-content: center; }
+.dv-cols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; }
+.dv-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.dv-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.dv-card-title { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; margin: 0; }
+.dv-link { font-family: 'Roboto', sans-serif; font-size: 12.5px; color: var(--sena-green-dark); background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.dv-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-family: 'Roboto', sans-serif; font-size: 13px; }
+.dv-row:last-child { border-bottom: none; }
+.dv-empty { text-align: center; padding: 20px; color: var(--text-secondary); font-family: 'Roboto', sans-serif; font-size: 13px; }
+.dv-quick-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+
+/* Columna izquierda del layout de 2 columnas */
+.dv-col-left { display: flex; flex-direction: column; gap: 16px; }
+
+/* Fecha + total dentro de una fila de venta reciente */
+.dv-row-meta { display: flex; align-items: center; gap: 10px; }
+
+/* Fila de notificación (el ícono va arriba, no centrado) */
+.dv-row--notif { align-items: flex-start; }
+.dv-notif-icon { color: var(--warning); margin-top: 2px; flex-shrink: 0; }
+.dv-notif-text { margin-left: 8px; line-height: 1.4; }

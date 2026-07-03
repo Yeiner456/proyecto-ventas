@@ -1,0 +1,52 @@
+/* ============================================================================
+ * NuevaVentaView.css
+ * ==========================================================================*/
+
+.nv-layout { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+.nv-search { position: relative; margin-bottom: 14px; }
+.nv-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
+.nv-search input { padding-left: 40px; }
+.nv-pills { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.nv-pill { padding: 7px 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--white); font-family: 'Roboto', sans-serif; font-size: 13px; cursor: pointer; color: var(--ink); }
+.nv-pill.active { background: var(--sena-green); border-color: var(--sena-green); color: var(--white); font-weight: 500; }
+.nv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.nv-card { background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 14px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 6px; }
+.nv-card:hover:not(:disabled) { border-color: var(--sena-green); }
+.nv-card:disabled { opacity: .5; cursor: not-allowed; }
+.nv-card-name { font-family: 'Roboto', sans-serif; font-weight: 500; font-size: 13.5px; }
+.nv-card-cat { font-family: 'Roboto', sans-serif; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .03em; }
+.nv-card-price { font-family: 'Roboto Mono', monospace; font-weight: 500; font-size: 15px; margin-top: 2px; }
+.nv-card-stock { font-family: 'Roboto', sans-serif; font-size: 11px; color: var(--text-secondary); }
+.nv-card-stock.low { color: var(--danger); }
+
+.nv-cart { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 18px; position: sticky; top: 20px; }
+.nv-cart-title { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; margin: 0 0 14px 0; }
+.nv-cart-empty { text-align: center; padding: 30px 10px; color: var(--text-secondary); font-family: 'Roboto', sans-serif; font-size: 13px; }
+.nv-cart-item { border-bottom: 1px solid var(--border); padding: 10px 0; }
+.nv-cart-item-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.nv-cart-item-name { font-family: 'Roboto', sans-serif; font-size: 13.5px; font-weight: 500; }
+.nv-cart-item-price { font-family: 'Roboto Mono', monospace; font-size: 13px; }
+.nv-cart-adjust-note { font-family: 'Roboto', sans-serif; font-size: 11px; color: var(--warning); margin-top: 2px; }
+.nv-qty { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.nv-qty button { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border); background: var(--white); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.nv-qty span { font-family: 'Roboto Mono', monospace; font-size: 13px; min-width: 20px; text-align: center; }
+.nv-cart-item-actions { display: flex; gap: 6px; margin-left: auto; }
+.nv-cart-item-actions button { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 2px; }
+.nv-cart-item-actions button:hover { color: var(--ink); }
+
+.nv-totals { padding-top: 12px; margin-top: 4px; }
+.nv-total-row { display: flex; justify-content: space-between; font-family: 'Roboto', sans-serif; font-size: 13px; padding: 4px 0; }
+.nv-total-row.grand { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 17px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; }
+.nv-total-row--ajuste { color: var(--warning); }
+
+.nv-metodos { display: flex; gap: 6px; margin: 12px 0; flex-wrap: wrap; }
+.nv-metodo-pill { flex: 1; min-width: 90px; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--white); font-family: 'Roboto', sans-serif; font-size: 12.5px; cursor: pointer; text-align: center; }
+.nv-metodo-pill.active { border-color: var(--sena-green); background: var(--green-soft); color: var(--sena-green-dark); font-weight: 500; }
+
+/* Modal de confirmación de venta cobrada */
+.nv-confirm-modal { text-align: center; }
+.nv-confirm-icon { color: var(--sena-green); margin: 8px auto; }
+.nv-confirm-numero { font-size: 18px; margin-bottom: 16px; }
+
+/* Observación de la venta (input dentro del carrito) */
+.nv-observacion-input { margin-bottom: 10px; }

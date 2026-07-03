@@ -1,0 +1,22 @@
+/* ============================================================================
+ * MetodosPagoView.css
+ * Este componente no tenía un bloque `const styles` como los demás, pero sí
+ * bastantes style={{}} inline; se agrupan aquí bajo el prefijo mpv-.
+ * ==========================================================================*/
+
+/* Header de la vista (título + botón "Nuevo método") */
+.mpv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+.mpv-subtitle { max-width: 560px; }
+
+/* Celda de nombre en la tabla (ícono + texto) */
+.mpv-nombre-cell { display: flex; align-items: center; gap: 8px; }
+.mpv-nombre-icon { color: var(--sena-green-dark); }
+
+/* Badge "predeterminado" con ícono de estrella */
+.mpv-badge-star { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Fila de acciones (editar / eliminar) */
+.mpv-actions-cell { display: flex; gap: 6px; }
+
+/* Nota de "solo lectura" con ícono de candado */
+.mpv-readonly-note { display: flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 12px; }

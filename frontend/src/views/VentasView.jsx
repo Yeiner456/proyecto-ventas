@@ -8,6 +8,7 @@ import {
   nombreSucursal,
   nombreMetodoPago,
 } from "../mocks/seedData";
+import "../styles/VentasView.css";
 
 /* ============================================================================
  * VENTAS — Registro / listado, con la máquina de estados
@@ -99,22 +100,6 @@ function formatMoney(n) {
   return `$${Number(n).toLocaleString("es-CO")}`;
 }
 
-const styles = `
-.vv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
-.vv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 620px; line-height: 1.5; }
-.vv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 20px; }
-.vv-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
-.vv-select { max-width: 200px; }
-.vv-date { max-width: 160px; }
-.vv-row-actions { display: flex; gap: 6px; }
-.vv-detalle-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-family: 'Roboto', sans-serif; font-size: 13px; }
-.vv-detalle-row:last-child { border-bottom: none; }
-.vv-total-row { display: flex; justify-content: space-between; padding-top: 10px; margin-top: 4px; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; }
-.vv-timeline { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 14px 0; }
-.vv-timeline-step { font-family: 'Roboto', sans-serif; font-size: 11.5px; padding: 4px 10px; border-radius: 999px; background: #F3F4F6; color: var(--text-secondary); }
-.vv-timeline-step.done { background: var(--green-soft); color: var(--sena-green-dark); }
-.vv-timeline-step.current { background: var(--sena-green); color: var(--white); font-weight: 500; }
-`;
 
 function CancelarModal({ venta, onCancel, onConfirm, procesando }) {
   const [motivo, setMotivo] = useState("");
@@ -129,7 +114,7 @@ function CancelarModal({ venta, onCancel, onConfirm, procesando }) {
         </div>
         {["pagado", "entregado"].includes(venta.estado) && (
           <div className="alert alert-warning">
-            <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={16} className="u-icon-inline" />
             <span>Esta venta ya estaba {ESTADO_LABEL[venta.estado].toLowerCase()}: al cancelarla se devuelve el inventario descontado.</span>
           </div>
         )}
@@ -158,7 +143,7 @@ function ConfirmDeleteModal({ venta, onCancel, onConfirm, deleting }) {
             <X size={18} />
           </button>
         </div>
-        <p style={{ fontFamily: "'Roboto', sans-serif", fontSize: 14, lineHeight: 1.5 }}>
+        <p className="u-confirm-text">
           Esta acción borra el registro por completo (a diferencia de cancelar, que conserva el historial). ¿Continuar?
         </p>
         <div className="modal-actions">
@@ -195,13 +180,13 @@ function DetalleModal({ venta, onClose }) {
                 <span className={`vv-timeline-step${i < indiceActual ? " done" : i === indiceActual ? " current" : ""}`}>
                   {ESTADO_LABEL[p]}
                 </span>
-                {i < pasos.length - 1 && <ChevronRight size={12} style={{ color: "var(--text-secondary)" }} />}
+                {i < pasos.length - 1 && <ChevronRight size={12} className="vv-timeline-arrow" />}
               </React.Fragment>
             ))}
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "16px 0", fontFamily: "'Roboto', sans-serif", fontSize: 13 }}>
+        <div className="vv-detalle-grid">
           <div><div className="field-help">Sucursal</div>{nombreSucursal(venta.sucursal_id)}</div>
           <div><div className="field-help">Cajero</div>{nombreCajero(venta.cajero_id)}</div>
           <div><div className="field-help">Fecha</div>{formatFecha(venta.created_at)}</div>
@@ -209,13 +194,13 @@ function DetalleModal({ venta, onClose }) {
         </div>
 
         {venta.observacion && (
-          <div className="alert alert-info" style={{ fontSize: 12.5 }}>
-            <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div className="alert alert-info vv-obs-alert">
+            <Info size={14} className="u-icon-inline" />
             <span>{venta.observacion}</span>
           </div>
         )}
 
-        <div className="field-help" style={{ marginBottom: 8, textTransform: "uppercase", letterSpacing: ".03em" }}>Productos</div>
+        <div className="field-help vv-productos-label">Productos</div>
         {venta.detalles.map((d, i) => (
           <div className="vv-detalle-row" key={i}>
             <span>{d.cantidad} × {d.nombre}</span>
@@ -314,7 +299,6 @@ export default function VentasView() {
 
   return (
     <div>
-      <style>{styles}</style>
       <div className="breadcrumb">› Ventas</div>
       <div className="vv-header">
         <div>
@@ -333,7 +317,7 @@ export default function VentasView() {
         </div>
         <div className="stat-card">
           <div className="stat-label">En curso</div>
-          <div className="stat-value" style={{ color: stats.pendientes > 0 ? "var(--warning)" : "inherit" }}>{stats.pendientes}</div>
+          <div className={`stat-value${stats.pendientes > 0 ? " u-value-warning" : ""}`}>{stats.pendientes}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Total vendido (pagado + entregado)</div>
@@ -374,8 +358,8 @@ export default function VentasView() {
               visibles.map((v) => (
                 <tr key={v.id_venta}>
                   <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <Receipt size={14} style={{ color: "var(--sena-green-dark)" }} />
+                    <div className="vv-numero-cell">
+                      <Receipt size={14} className="vv-numero-icon" />
                       <span className="text-mono">#{v.id_venta}</span>
                     </div>
                   </td>
@@ -426,7 +410,7 @@ export default function VentasView() {
       )}
 
       {toast && (
-        <div style={{ position: "fixed", bottom: 24, right: 24, background: "var(--ink)", color: "var(--white)", padding: "12px 18px", borderRadius: 8, fontFamily: "'Roboto', sans-serif", fontSize: 13.5, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>
+        <div className="toast">
           <Info size={15} />
           {toast}
         </div>

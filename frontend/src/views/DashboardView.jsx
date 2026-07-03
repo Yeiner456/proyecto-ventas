@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { TrendingUp, PackageX, Bell, Receipt, ArrowRight, ShoppingCart, Users } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
+import "../styles/DashboardView.css";
 import {
   sucursales as sucursalesSeed,
   ventas as ventasSeed,
@@ -56,22 +57,6 @@ const ESTADO_LABEL = {
   cancelado: "Cancelado",
 };
 
-const styles = `
-.dv-header { margin-bottom: 22px; }
-.dv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
-.dv-kpi { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
-.dv-kpi-top { display: flex; justify-content: space-between; align-items: center; }
-.dv-kpi-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--green-soft); color: var(--sena-green-dark); display: flex; align-items: center; justify-content: center; }
-.dv-cols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; }
-.dv-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
-.dv-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.dv-card-title { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; margin: 0; }
-.dv-link { font-family: 'Roboto', sans-serif; font-size: 12.5px; color: var(--sena-green-dark); background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 4px; }
-.dv-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-family: 'Roboto', sans-serif; font-size: 13px; }
-.dv-row:last-child { border-bottom: none; }
-.dv-empty { text-align: center; padding: 20px; color: var(--text-secondary); font-family: 'Roboto', sans-serif; font-size: 13px; }
-.dv-quick-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
-`;
 
 export default function DashboardView() {
   const { usuario: actor } = useAuth();
@@ -125,7 +110,6 @@ export default function DashboardView() {
 
   return (
     <div>
-      <style>{styles}</style>
       <div className="breadcrumb">› Dashboard</div>
       <div className="dv-header">
         <h1 className="page-title">
@@ -161,7 +145,7 @@ export default function DashboardView() {
             </div>
             <div className="dv-kpi">
               <div className="dv-kpi-top"><span className="text-muted">En curso</span><div className="dv-kpi-icon"><TrendingUp size={16} /></div></div>
-              <div className="stat-value" style={{ color: enCurso.length > 0 ? "var(--warning)" : "inherit" }}>{enCurso.length}</div>
+              <div className={`stat-value${enCurso.length > 0 ? " u-value-warning" : ""}`}>{enCurso.length}</div>
             </div>
             <div className="dv-kpi">
               <div className="dv-kpi-top"><span className="text-muted">Total facturado</span><div className="dv-kpi-icon"><Receipt size={16} /></div></div>
@@ -169,14 +153,14 @@ export default function DashboardView() {
             </div>
             <div className="dv-kpi">
               <div className="dv-kpi-top"><span className="text-muted">Stock bajo</span><div className="dv-kpi-icon"><PackageX size={16} /></div></div>
-              <div className="stat-value" style={{ color: stockBajo.length > 0 ? "var(--danger)" : "inherit" }}>{stockBajo.length}</div>
+              <div className={`stat-value${stockBajo.length > 0 ? " u-value-danger" : ""}`}>{stockBajo.length}</div>
             </div>
           </>
         )}
       </div>
 
       <div className="dv-cols">
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="dv-col-left">
           {admin && (
             <div className="dv-card">
               <div className="dv-card-header">
@@ -207,7 +191,7 @@ export default function DashboardView() {
                     #{v.id_venta} · {nombreCajero(v.cajero_id)}
                     {admin && ` · ${nombreSucursal(v.sucursal_id)}`}
                   </span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className="dv-row-meta">
                     <span className="text-muted">{formatFecha(v.created_at)}</span>
                     <span className="text-mono">{formatMoney(v.total)}</span>
                   </span>
@@ -227,7 +211,7 @@ export default function DashboardView() {
               {stockBajo.map((p) => (
                 <div className="dv-row" key={p.id_producto}>
                   <span>{p.nombre}{admin && ` · ${nombreSucursal(p.sucursal_id)}`}</span>
-                  <span className="text-mono" style={{ color: "var(--danger)" }}>
+                  <span className="text-mono u-value-danger">
                     {stockDe(p.id_producto)} / mín. {p.stock_minimo}
                   </span>
                 </div>
@@ -248,9 +232,9 @@ export default function DashboardView() {
               <div className="dv-empty">Estás al día.</div>
             ) : (
               notificacionesScope.slice(0, 4).map((n) => (
-                <div className="dv-row" key={n.id_notificacion} style={{ alignItems: "flex-start" }}>
-                  <Bell size={13} style={{ color: "var(--warning)", marginTop: 2, flexShrink: 0 }} />
-                  <span style={{ marginLeft: 8, lineHeight: 1.4 }}>{n.mensaje}</span>
+                <div className="dv-row dv-row--notif" key={n.id_notificacion}>
+                  <Bell size={13} className="dv-notif-icon" />
+                  <span className="dv-notif-text">{n.mensaje}</span>
                 </div>
               ))
             )}
@@ -258,12 +242,12 @@ export default function DashboardView() {
 
           <div className="dv-quick-actions">
             {(actor.rol === "admin_sucursal" || actor.rol === "cajero") && (
-              <button className="btn btn-primary" style={{ justifyContent: "center" }} onClick={() => navigate("/ventas/nueva")}>
+              <button className="btn btn-primary u-justify-center" onClick={() => navigate("/ventas/nueva")}>
                 <ShoppingCart size={15} /> Nueva venta
               </button>
             )}
             {admin && (
-              <button className="btn btn-outline" style={{ justifyContent: "center" }} onClick={() => navigate("/usuarios")}>
+              <button className="btn btn-outline u-justify-center" onClick={() => navigate("/usuarios")}>
                 <Users size={15} /> Gestionar usuarios
               </button>
             )}

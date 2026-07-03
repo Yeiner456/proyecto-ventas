@@ -16,6 +16,7 @@ import {
   usuarios as usuariosSeed,
   nombreSucursal,
 } from "../mocks/seedData";
+import "../styles/RolesView.css";
 
 /* ============================================================================
  * ROLES — Vista CRUD
@@ -68,7 +69,6 @@ const PERMISOS_POR_ROL = {
     "Ver auditoría de su sucursal",
   ],
   cajero: ["Registrar ventas", "Cobrar", "Consultar productos"],
-  contador: ["Ver facturas", "Ver auditoría", "Generar reportes"],
 };
 
 function permisosDe(nombreRol) {
@@ -105,118 +105,6 @@ const api = {
   },
 };
 
-// --- Estilos: tokens tomados literalmente del Acta de Colores y Tipografía --
-const styles = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;700&family=Roboto:wght@400;500&family=Roboto+Mono:wght@500&display=swap');
-
-.roles-view {
-  --sena-green: #39A900;
-  --sena-green-dark: #2D8600;
-  --ink: #1A1A1A;
-  --bg: #F5F5F5;
-  --white: #FFFFFF;
-  --green-soft: #E8F5E0;
-  --warning: #F59E0B;
-  --danger: #EF4444;
-  --info: #3B82F6;
-  --text-secondary: #6B7280;
-  --border: #E5E7EB;
-
-  font-family: 'Roboto', sans-serif;
-  background: var(--bg);
-  color: var(--ink);
-  min-height: 100%;
-  padding: 28px 32px;
-  box-sizing: border-box;
-}
-.roles-view * { box-sizing: border-box; }
-
-.rv-breadcrumb { font-family: 'Roboto', sans-serif; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
-.rv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
-.rv-title { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 30px; margin: 0 0 6px 0; }
-.rv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 560px; line-height: 1.5; }
-
-.btn { font-family: 'Roboto', sans-serif; font-weight: 500; font-size: 14px; border-radius: 8px; padding: 10px 18px; cursor: pointer; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 8px; transition: background-color .15s ease, border-color .15s ease; white-space: nowrap; }
-.btn:disabled { opacity: .55; cursor: not-allowed; }
-.btn-primary { background: var(--sena-green); color: var(--white); }
-.btn-primary:hover:not(:disabled) { background: var(--sena-green-dark); }
-.btn-outline { background: var(--white); color: var(--ink); border-color: var(--border); }
-.btn-outline:hover:not(:disabled) { border-color: var(--sena-green); color: var(--sena-green-dark); }
-.btn-danger-ghost { background: var(--white); color: var(--danger); border-color: var(--border); }
-.btn-danger-ghost:hover:not(:disabled) { border-color: var(--danger); background: #FEF2F2; }
-.btn-danger { background: var(--danger); color: var(--white); }
-.btn-danger:hover:not(:disabled) { background: #DC2626; }
-.btn-sm { padding: 7px 12px; font-size: 13px; }
-
-.rv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
-.rv-stat-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
-.rv-stat-label { font-family: 'Roboto', sans-serif; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
-.rv-stat-value { font-family: 'Roboto Mono', monospace; font-weight: 500; font-size: 28px; line-height: 1; }
-.rv-stat-note { font-family: 'Roboto', sans-serif; font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
-
-.rv-role-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 28px; }
-.rv-role-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-.rv-role-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.rv-role-icon { width: 38px; height: 38px; border-radius: 9px; background: var(--green-soft); color: var(--sena-green-dark); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.rv-role-name { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 16px; margin: 0 0 4px 0; text-transform: none; }
-.rv-role-desc { font-family: 'Roboto', sans-serif; font-size: 13px; color: var(--text-secondary); line-height: 1.45; margin: 0; }
-
-.badge { font-family: 'Roboto', sans-serif; font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
-.badge-success { background: var(--green-soft); color: var(--sena-green-dark); }
-.badge-neutral { background: #F3F4F6; color: var(--text-secondary); }
-
-.rv-role-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.rv-metric-value { font-family: 'Roboto Mono', monospace; font-weight: 500; font-size: 16px; }
-.rv-metric-label { font-family: 'Roboto', sans-serif; font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
-
-.rv-perm-title { font-family: 'Roboto', sans-serif; font-size: 11px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
-.rv-perm-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; list-style: none; margin: 0; padding: 0; }
-.rv-perm-item { font-family: 'Roboto', sans-serif; font-size: 12.5px; color: var(--ink); display: flex; align-items: center; gap: 6px; }
-.rv-perm-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--sena-green); flex-shrink: 0; }
-.rv-perm-empty { font-family: 'Roboto', sans-serif; font-size: 12.5px; color: var(--warning); display: flex; align-items: center; gap: 6px; }
-
-.rv-role-actions { display: flex; gap: 8px; margin-top: auto; }
-
-.rv-section-title { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 18px; margin: 0 0 4px 0; }
-.rv-section-sub { font-family: 'Roboto', sans-serif; font-size: 13px; color: var(--text-secondary); margin: 0 0 14px 0; }
-
-.rv-table-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-table.rv-table { width: 100%; border-collapse: collapse; }
-.rv-table thead th { text-align: left; font-family: 'Roboto', sans-serif; font-weight: 500; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .03em; padding: 12px 20px; background: #FAFAFA; border-bottom: 1px solid var(--border); }
-.rv-table tbody td { padding: 13px 20px; font-family: 'Roboto', sans-serif; font-size: 13.5px; border-bottom: 1px solid var(--border); }
-.rv-table tbody tr:last-child td { border-bottom: none; }
-.rv-table tbody tr:hover { background: #FAFAFA; }
-.rv-email-link { color: var(--info); text-decoration: underline; }
-.rv-empty-row td { text-align: center; padding: 32px; color: var(--text-secondary); font-family: 'Roboto', sans-serif; font-size: 13px; }
-
-.rv-overlay { position: fixed; inset: 0; background: rgba(26,26,26,.45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
-.rv-modal { background: var(--white); border-radius: 14px; width: 100%; max-width: 460px; padding: 24px; max-height: 88vh; overflow-y: auto; }
-.rv-modal-wide { max-width: 560px; }
-.rv-modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
-.rv-modal-title { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 18px; margin: 0; }
-.rv-modal-close { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px; border-radius: 6px; }
-.rv-modal-close:hover { background: #F3F4F6; }
-
-.rv-field { margin-bottom: 16px; }
-.rv-label { display: block; font-family: 'Roboto', sans-serif; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
-.rv-input, .rv-textarea { width: 100%; font-family: 'Roboto', sans-serif; font-size: 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; outline: none; }
-.rv-input:focus, .rv-textarea:focus { border-color: var(--sena-green); box-shadow: 0 0 0 3px var(--green-soft); }
-.rv-textarea { resize: vertical; min-height: 72px; font-family: 'Roboto', sans-serif; }
-.rv-help { font-family: 'Roboto', sans-serif; font-size: 12px; color: var(--text-secondary); margin-top: 5px; line-height: 1.4; }
-.rv-checkbox-row { display: flex; align-items: center; gap: 8px; }
-
-.rv-alert { display: flex; gap: 10px; padding: 12px 14px; border-radius: 8px; font-family: 'Roboto', sans-serif; font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
-.rv-alert-warning { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
-.rv-alert-danger { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
-.rv-alert-info { background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; }
-
-.rv-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-
-.rv-user-mini { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
-.rv-user-mini:last-child { border-bottom: none; }
-.rv-user-mini-name { font-family: 'Roboto', sans-serif; font-size: 13.5px; font-weight: 500; }
-.rv-user-mini-email { font-family: 'Roboto', sans-serif; font-size: 12px; color: var(--text-secondary); }
-`;
 
 function Badge({ children, tone = "neutral" }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
@@ -237,7 +125,7 @@ function RoleCard({ role, usuariosDelRol, onEdit, onDelete, onVerUsuarios }) {
   return (
     <div className="rv-role-card">
       <div className="rv-role-card-top">
-        <div style={{ display: "flex", gap: 12 }}>
+        <div className="rv-role-info">
           <div className="rv-role-icon">
             <Shield size={18} />
           </div>
@@ -294,7 +182,7 @@ function RoleCard({ role, usuariosDelRol, onEdit, onDelete, onVerUsuarios }) {
         <button
           className="btn btn-danger-ghost btn-sm"
           onClick={() => onDelete(role)}
-          style={{ marginLeft: "auto" }}
+          className="u-ml-auto"
         >
           <Trash2 size={14} />
         </button>
@@ -346,12 +234,12 @@ function RoleFormModal({ initial, onCancel, onSubmit, saving }) {
             onChange={(e) => setNombre(e.target.value.trim().toLowerCase())}
           />
           {touched && !nombreValido && (
-            <p className="rv-help" style={{ color: "var(--danger)" }}>
+            <p className="rv-help rv-help--danger">
               Usa minúsculas y guiones bajos, sin espacios (ej. admin_sucursal).
             </p>
           )}
           {!isEdit && nombreValido && !esRolConocido && (
-            <p className="rv-help" style={{ color: "var(--warning)" }}>
+            <p className="rv-help rv-help--warning">
               Este nombre no coincide con ningún rol conocido por las Policies
               del backend. El rol se creará, pero no tendrá permisos reales
               hasta que se actualicen las Policies para reconocerlo.
@@ -368,7 +256,7 @@ function RoleFormModal({ initial, onCancel, onSubmit, saving }) {
             onChange={(e) => setDescripcion(e.target.value)}
           />
           {touched && !descripcion.trim() && (
-            <p className="rv-help" style={{ color: "var(--danger)" }}>
+            <p className="rv-help rv-help--danger">
               La descripción es obligatoria.
             </p>
           )}
@@ -382,7 +270,7 @@ function RoleFormModal({ initial, onCancel, onSubmit, saving }) {
               checked={activo}
               onChange={(e) => setActivo(e.target.checked)}
             />
-            <label htmlFor="rv-activo" className="rv-label" style={{ margin: 0 }}>
+            <label htmlFor="rv-activo" className="rv-label u-label-inline">
               Rol activo
             </label>
           </div>
@@ -412,9 +300,9 @@ function ConfirmDeleteModal({ role, onCancel, onConfirm, deleting, error }) {
           </button>
         </div>
 
-        <p style={{ fontFamily: "'Roboto', sans-serif", fontSize: 14, lineHeight: 1.5 }}>
+        <p className="u-confirm-text">
           ¿Seguro que quieres eliminar el rol{" "}
-          <strong style={{ fontFamily: "'Roboto Mono', monospace" }}>
+          <strong className="rv-mono">
             {role.nombre}
           </strong>
           ? Esta acción no se puede deshacer.
@@ -422,7 +310,7 @@ function ConfirmDeleteModal({ role, onCancel, onConfirm, deleting, error }) {
 
         {error && (
           <div className="rv-alert rv-alert-danger">
-            <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={16} className="u-icon-inline" />
             <span>{error}</span>
           </div>
         )}
@@ -454,7 +342,7 @@ function UsersByRoleModal({ role, usuarios, onClose }) {
         <div className="rv-modal-header">
           <div>
             <h3 className="rv-modal-title">Usuarios con rol {role.nombre}</h3>
-            <p className="rv-help" style={{ marginTop: 4 }}>
+            <p className="rv-help u-mt-4">
               {usuarios.length} usuario{usuarios.length !== 1 ? "s" : ""}
             </p>
           </div>
@@ -464,7 +352,7 @@ function UsersByRoleModal({ role, usuarios, onClose }) {
         </div>
 
         {usuarios.length === 0 ? (
-          <p style={{ fontFamily: "'Roboto', sans-serif", fontSize: 13, color: "var(--text-secondary)" }}>
+          <p className="rv-empty-text">
             Ningún usuario tiene asignado este rol todavía.
           </p>
         ) : (
@@ -559,8 +447,6 @@ export default function RolesView() {
 
   return (
     <div className="roles-view">
-      <style>{styles}</style>
-
       <div className="rv-breadcrumb">› Roles</div>
       <div className="rv-header">
         <div>
@@ -692,23 +578,7 @@ export default function RolesView() {
       )}
 
       {toast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            background: "var(--ink)",
-            color: "var(--white)",
-            padding: "12px 18px",
-            borderRadius: 8,
-            fontFamily: "'Roboto', sans-serif",
-            fontSize: 13.5,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            boxShadow: "0 8px 24px rgba(0,0,0,.25)",
-          }}
-        >
+        <div className="toast">
           <Info size={15} />
           {toast}
         </div>
