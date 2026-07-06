@@ -46,7 +46,7 @@ const NAV_CONFIG = [
       { key: "nueva-venta", label: "Nueva venta", icon: ShoppingCart, path: "/ventas/nueva", roles: ["admin_sucursal", "cajero"] },
       { key: "registro-ventas", label: "Registro de ventas", icon: ClipboardList, path: "/ventas/registro", roles: ["admin_sucursal", "cajero"] },
       // FacturaPolicy::viewAny() => true para todos los roles autenticados.
-      { key: "facturas", label: "Facturas", icon: FileText, path: "/facturas", roles: ["admin_general", "admin_sucursal", "cajero", "contador"] },
+      { key: "facturas", label: "Facturas", icon: FileText, path: "/facturas", roles: ["admin_general", "admin_sucursal", "cajero"] },
       { key: "metodos-pago", label: "Métodos de pago", icon: CreditCard, path: "/metodos-pago", roles: ["admin_general"] },
     ],
   },
@@ -71,9 +71,8 @@ const NAV_CONFIG = [
     group: "Sistema",
     items: [
       { key: "notificaciones", label: "Notificaciones", icon: Bell, path: "/notificaciones", roles: "todos" },
-      // AuditoriaLogPolicy::viewAny() exige esAdminSucursal() -> 'contador'
-      // queda fuera con las Policies actuales. Revisar con el equipo si
-      // es intencional; lo dejo fiel al backend, no lo cambio por mi cuenta.
+      // AuditoriaLogPolicy::viewAny() exige esAdminSucursal(); coincide
+      // con esta lista (cajero nunca gestiona auditoría).
       { key: "auditoria", label: "Auditoría", icon: ClipboardList, path: "/auditoria", roles: ["admin_general", "admin_sucursal"] },
     ],
   },

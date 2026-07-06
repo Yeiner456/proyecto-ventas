@@ -53,28 +53,23 @@ export const roles = [
     descripcion: "Opera el día a día: registra ventas y cobra. Atado a una sucursal.",
     activo: true,
   },
-  {
-    id_rol: 4,
-    nombre: "contador",
-    descripcion: "Consulta facturación, auditoría y genera reportes contables.",
-    activo: false,
-  },
 ];
 
 // sucursal_id === null  ->  admin_general (misma regla que Usuario::esAdminGeneral() en el backend)
 export const usuarios = [
-  { id_usuario: 1, nombre: "Admin", email: "admin@example.com", rol_id: 1, sucursal_id: null, activo: true },
-  { id_usuario: 2, nombre: "Yeiner Smith Quintero", email: "y.quintero@example.com", rol_id: 1, sucursal_id: null, activo: true },
-  { id_usuario: 3, nombre: "Laura Pérez", email: "l.perez@example.com", rol_id: 2, sucursal_id: 1, activo: true },
-  { id_usuario: 4, nombre: "Andrés Torres", email: "a.torres@example.com", rol_id: 2, sucursal_id: 2, activo: true },
-  { id_usuario: 5, nombre: "Maria Gaviria", email: "m.gaviria@example.com", rol_id: 3, sucursal_id: 1, activo: true },
-  { id_usuario: 6, nombre: "Sofia Montoya", email: "s.montoya@example.com", rol_id: 3, sucursal_id: 1, activo: true },
-  { id_usuario: 7, nombre: "Santiago Ruiz", email: "s.ruiz@example.com", rol_id: 3, sucursal_id: 1, activo: true },
+  // --- Reales, coinciden exactamente con UsuarioSeeder.php (password: password123) ---
+  { id_usuario: 1, nombre: "Admin General", email: "admin@monito.com", rol_id: 1, sucursal_id: null, activo: true },
+  { id_usuario: 2, nombre: "Admin Sucursal Centro", email: "adminsucursal@monito.com", rol_id: 2, sucursal_id: 1, activo: true },
+  { id_usuario: 3, nombre: "Cajero Centro", email: "cajero@monito.com", rol_id: 3, sucursal_id: 1, activo: true },
+  { id_usuario: 4, nombre: "Cajero Norte", email: "cajeronorte@monito.com", rol_id: 3, sucursal_id: 2, activo: true },
+  // --- Demo de UI únicamente — NO existen en el backend real, solo dan
+  // variedad para probar tablas/filtros con más de una fila por sucursal ---
+  { id_usuario: 5, nombre: "Laura Pérez", email: "l.perez@example.com", rol_id: 2, sucursal_id: 1, activo: true },
+  { id_usuario: 6, nombre: "Maria Gaviria", email: "m.gaviria@example.com", rol_id: 3, sucursal_id: 1, activo: true },
+  { id_usuario: 7, nombre: "Sofia Montoya", email: "s.montoya@example.com", rol_id: 3, sucursal_id: 1, activo: true },
   { id_usuario: 8, nombre: "Camila Rojas", email: "c.rojas@example.com", rol_id: 3, sucursal_id: 2, activo: true },
   { id_usuario: 9, nombre: "Daniel Ospina", email: "d.ospina@example.com", rol_id: 3, sucursal_id: 2, activo: false },
   { id_usuario: 10, nombre: "Valentina Cárdenas", email: "v.cardenas@example.com", rol_id: 3, sucursal_id: 2, activo: true },
-  { id_usuario: 11, nombre: "Felipe Naranjo", email: "f.naranjo@example.com", rol_id: 4, sucursal_id: 1, activo: false },
-  { id_usuario: 12, nombre: "Isabella Castro", email: "i.castro@example.com", rol_id: 4, sucursal_id: 2, activo: false },
 ];
 
 // Coincide con backend/database/seeders/CategoriaProductoSeeder.php
@@ -133,7 +128,7 @@ export const ventas = [
   {
     id_venta: 1,
     sucursal_id: 1,
-    cajero_id: 5,
+    cajero_id: 3, // Cajero Centro (real, cajero@monito.com)
     estado: "pagado",
     metodo_pago_id: 1,
     total: 22000,
@@ -148,7 +143,7 @@ export const ventas = [
   {
     id_venta: 2,
     sucursal_id: 1,
-    cajero_id: 5,
+    cajero_id: 6, // Maria Gaviria (demo)
     estado: "pendiente",
     metodo_pago_id: null,
     total: 4500,
@@ -159,7 +154,7 @@ export const ventas = [
   {
     id_venta: 3,
     sucursal_id: 1,
-    cajero_id: 5,
+    cajero_id: 6, // Maria Gaviria (demo)
     estado: "en_preparacion",
     metodo_pago_id: null,
     total: 7000,
@@ -173,7 +168,7 @@ export const ventas = [
   {
     id_venta: 4,
     sucursal_id: 1,
-    cajero_id: 6,
+    cajero_id: 7, // Sofia Montoya (demo)
     estado: "cancelado",
     metodo_pago_id: 1,
     total: 4000,
@@ -191,7 +186,7 @@ export const facturas = [
     venta_id: 1,
     sucursal_id: 1,
     numero_factura: "SUC01-000001",
-    cajero_id: 5,
+    cajero_id: 3, // Cajero Centro (real)
     total: 22000,
     pdf_ruta: null, // el backend aún no expone un endpoint de descarga (ver nota en FacturasView)
     created_at: "2026-06-20T10:16:00",
@@ -231,7 +226,7 @@ export const notificaciones = [
 export const auditoriaLogs = [
   {
     id_auditoria: 1,
-    usuario_id: 5,
+    usuario_id: 3, // Cajero Centro (real)
     sucursal_id: 1,
     accion: "crear_venta",
     tabla_afectada: "ventas",
@@ -243,7 +238,7 @@ export const auditoriaLogs = [
   },
   {
     id_auditoria: 2,
-    usuario_id: 5,
+    usuario_id: 3, // Cajero Centro (real)
     sucursal_id: 1,
     accion: "cambiar_estado_venta",
     tabla_afectada: "ventas",
@@ -255,7 +250,7 @@ export const auditoriaLogs = [
   },
   {
     id_auditoria: 3,
-    usuario_id: 6,
+    usuario_id: 7, // Sofia Montoya (demo)
     sucursal_id: 1,
     accion: "cambiar_estado_venta",
     tabla_afectada: "ventas",
@@ -267,7 +262,7 @@ export const auditoriaLogs = [
   },
   {
     id_auditoria: 4,
-    usuario_id: 3,
+    usuario_id: 5, // Laura Pérez (demo)
     sucursal_id: 1,
     accion: "ajustar_inventario",
     tabla_afectada: "inventario",
