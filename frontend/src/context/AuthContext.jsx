@@ -1,61 +1,93 @@
-import React, { createContext, useContext, useState } from "react";
-import { resolverActor } from "../mocks/seedData";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { api, getToken, setToken, clearToken, ApiError } from "../services/apiClient";
 
 /* ============================================================================
- * AuthContext — punto único de verdad sobre "quién está logueado".
+ * AuthContext — login real contra POST /api/login.
  * ----------------------------------------------------------------------------
- * Contrato real (backend/routes/api.php + AuthController):
- *   POST /api/login   { id_usuario, password, device_name? } -> { usuario, token }
- *   GET  /api/me       (Bearer token)                        -> usuario
- *   POST /api/logout   (Bearer token)
+ * PUNTO DE ADAPTACIÓN (lo más importante de este archivo):
+ * La API devuelve el usuario con relaciones anidadas:
+ *   { id_usuario, nombre, email, activo, sucursal_id,
+ *     rol: { id_rol, nombre }, sucursal: { id_sucursal, nombre, ... } | null }
  *
- * PENDIENTE DE INTEGRACIÓN (marcado con TODO): hoy este contexto arranca
- * con un usuario de ejemplo para poder construir y previsualizar las
- * vistas sin backend levantado. Cuando el login esté conectado:
- *   1. Quitar DEMO_USERS y loginDemo().
- *   2. `login()` hace el POST real, guarda el token (localStorage o memoria)
- *      y guarda `usuario` con la respuesta del backend.
- *   3. Al montar la app, si hay token guardado, llamar GET /api/me para
- *      revalidar sesión en vez de asumir el usuario demo.
+ * Pero las 13 vistas que ya existen (Sidebar, UsuariosView, VentasView...)
+ * fueron construidas esperando la forma "denormalizada" que ya usaba el
+ * modo demo:
+ *   { id_usuario, nombre, rol: "admin_sucursal", sucursal: "Sucursal Centro" | null }
  *
- * Forma de `usuario` (igual a la respuesta de la API, ver Usuario.php):
- *   { id_usuario, nombre, email, activo, sucursal_id, rol: { id_rol, nombre } }
- * `sucursal` aquí es el nombre ya resuelto (relación cargada) para no
- * obligar a cada vista a hacer el join visualmente.
+ * En vez de refactorizar 13 archivos para que entiendan objetos anidados,
+ * la transformación ocurre UNA sola vez, aquí, en adaptarUsuario(). El
+ * resto de la aplicación nunca sabe si el usuario vino de la API real o
+ * de datos de prueba — solo conoce la forma interna estable. Es el mismo
+ * principio de aislamiento que ya aplicamos separando AppLayout/Sidebar.
+ *
+ * LIMITACIÓN CONOCIDA: sucursal se expone como nombre (string), no como
+ * id numérico, porque así es como las demás vistas ya hacen el lookup
+ * (`sucursalesSeed.find(s => s.nombre === actor.sucursal)`). Esto
+ * funciona hoy porque los nombres de sucursalesSeed coinciden con
+ * SucursalSeeder.php real, pero es frágil: si alguien renombra una
+ * sucursal en la base de datos, el emparejamiento por nombre se rompe
+ * silenciosamente. La mejora correcta a futuro es exponer sucursal_id
+ * aquí y refactorizar las vistas para buscar por id, no por nombre — no
+ * lo hago ahora porque implica tocar los 13 archivos ya construidos y
+ * no es lo que se pidió en este paso.
  * ==========================================================================*/
 
 const AuthContext = createContext(null);
 
-// TODO: borrar este bloque cuando el login real esté conectado.
-// Los ids vienen de src/mocks/seedData.js — un representante por rol.
-const DEMO_USERS = {
-  admin_general: resolverActor(1),   // Admin
-  admin_sucursal: resolverActor(3),  // Laura Pérez — Sucursal Centro
-  cajero: resolverActor(5),          // Maria Gaviria — Sucursal Centro
-  contador: resolverActor(11),       // Felipe Naranjo — Sucursal Centro
-};
+function adaptarUsuario(usuarioApi) {
+  return {
+    id_usuario: usuarioApi.id_usuario,
+    nombre: usuarioApi.nombre,
+    email: usuarioApi.email,
+    rol: usuarioApi.rol?.nombre ?? null,
+    sucursal: usuarioApi.sucursal?.nombre ?? null,
+  };
+}
 
 export function AuthProvider({ children }) {
-  const [usuario, setUsuario] = useState(DEMO_USERS.admin_general);
+  const [usuario, setUsuario] = useState(null);
+  const [loading, setLoading] = useState(true); // true mientras se valida la sesión guardada
 
-  // TODO: reemplazar por el POST /api/login real.
+  // Al montar la app: si hay un token guardado de una sesión anterior,
+  // validarlo contra GET /me en vez de asumir que sigue siendo válido
+  // (pudo expirar, o el usuario pudo ser desactivado desde entonces).
+  useEffect(() => {
+    const token = getToken();
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+    api
+      .get("/me")
+      .then((usuarioApi) => setUsuario(adaptarUsuario(usuarioApi)))
+      .catch(() => clearToken()) // token inválido/expirado -> queda deslogueado
+      .finally(() => setLoading(false));
+  }, []);
+
   async function login(id_usuario, password) {
-    throw new Error("login() aún no está conectado al backend.");
+    // Deja que ApiError se propague — LoginView decide cómo mostrarla.
+    const data = await api.post(
+      "/login",
+      { id_usuario: Number(id_usuario), password, device_name: "web" },
+      { auth: false } // no hay token todavía, es justo lo que estamos pidiendo
+    );
+    setToken(data.token);
+    setUsuario(adaptarUsuario(data.usuario));
   }
 
-  function logout() {
+  async function logout() {
+    try {
+      await api.post("/logout");
+    } catch {
+      // Si el logout en el servidor falla (ej. token ya expiró), no
+      // bloqueamos al usuario: igual lo sacamos localmente.
+    }
+    clearToken();
     setUsuario(null);
-    // TODO: POST /api/logout con el Bearer token, y limpiar el token guardado.
-  }
-
-  // Solo para desarrollo: cambiar de usuario sin pasar por login real.
-  // Quitar esta función (y cualquier UI que la use) antes de producción.
-  function loginDemo(rol) {
-    setUsuario(DEMO_USERS[rol]);
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, login, logout, loginDemo }}>
+    <AuthContext.Provider value={{ usuario, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
