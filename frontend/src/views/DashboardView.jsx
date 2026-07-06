@@ -1,3 +1,7 @@
+import BackupTestButton from "../components/BackupTestButton";
+   // ...dentro del render:
+   <BackupTestButton />
+   
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { TrendingUp, PackageX, Bell, Receipt, ArrowRight, ShoppingCart, Users } from "lucide-react";
