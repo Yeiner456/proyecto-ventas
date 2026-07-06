@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BackupController;
 use App\Http\Controllers\AuditoriaLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoriaProductoController;
@@ -16,20 +17,6 @@ use App\Http\Controllers\SucursalController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Controllers\VentaController;
 use Illuminate\Support\Facades\Route;
-
-/*
-|--------------------------------------------------------------------------
-| API Routes
-|--------------------------------------------------------------------------
-|
-| /login es pública (es donde se consigue el token). Todo lo demás exige
-| 'auth:sanctum': el cliente debe mandar el header
-| Authorization: Bearer {token} obtenido en el login.
-|
-| En cuanto este middleware está activo, auth()->user() en los
-| controladores deja de ser null, y el filtro multi-tenant por sucursal
-| (FiltraPorSucursal) se activa solo, sin tocar ningún controlador.
-*/
 
 // --- Pública: login (con límite de intentos para evitar fuerza bruta) ---
 Route::middleware('throttle:6,1')->post('login', [AuthController::class, 'login']);
@@ -78,4 +65,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Auditoría: solo lectura
     Route::apiResource('auditoria-logs', AuditoriaLogController::class)->only(['index', 'show']);
+
+    // Backups de base de datos: solo admin_general (Gate 'gestionar-backups')
+    Route::prefix('backups')->group(function () {
+        Route::get('/', [BackupController::class, 'index']);
+        Route::post('/', [BackupController::class, 'store']);
+        Route::get('/{filename}/descargar', [BackupController::class, 'download']);
+    });
 });
