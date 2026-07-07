@@ -68,5 +68,11 @@ class AppServiceProvider extends ServiceProvider
         foreach ($this->policies as $model => $policy) {
             Gate::policy($model, $policy);
         }
+
+        // Acción de sistema sin modelo Eloquent asociado (no hay tabla
+        // 'backups'), así que no encaja en el mapa $policies de arriba
+        // como las demás. Por eso se registra aquí, con un Gate explícito
+        // en vez de una Policy de modelo: solo admin_general.
+        Gate::define('gestionar-backups', fn (Usuario $actor) => $actor->esAdminGeneral());
     }
 }

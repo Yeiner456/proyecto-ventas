@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { api, getToken, setToken, clearToken, ApiError } from "../services/apiClient";
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState, useEffect } from "react";
+import { api, getToken, setToken, clearToken } from "../services/apiClient";
 
 /* ============================================================================
  * AuthContext — login real contra POST /api/login.
@@ -46,7 +47,7 @@ function adaptarUsuario(usuarioApi) {
 
 export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null);
-  const [loading, setLoading] = useState(true); // true mientras se valida la sesión guardada
+  const [loading, setLoading] = useState(() => Boolean(getToken())); // true solo si hay token guardado
 
   // Al montar la app: si hay un token guardado de una sesión anterior,
   // validarlo contra GET /me en vez de asumir que sigue siendo válido
@@ -54,7 +55,6 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const token = getToken();
     if (!token) {
-      setLoading(false);
       return;
     }
     api
