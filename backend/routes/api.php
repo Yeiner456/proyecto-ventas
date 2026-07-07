@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\BackupController;
 use App\Http\Controllers\AuditoriaLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoriaProductoController;
@@ -66,10 +65,4 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auditoría: solo lectura
     Route::apiResource('auditoria-logs', AuditoriaLogController::class)->only(['index', 'show']);
 
-    // Backups de base de datos: solo admin_general (Gate 'gestionar-backups')
-    Route::prefix('backups')->group(function () {
-        Route::get('/', [BackupController::class, 'index']);
-        Route::post('/', [BackupController::class, 'store']);
-        Route::get('/{filename}/descargar', [BackupController::class, 'download']);
     });
-});
