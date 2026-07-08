@@ -100,4 +100,63 @@ export const api = {
   put: (path, body) => request(path, { method: "PUT", body }),
   patch: (path, body) => request(path, { method: "PATCH", body }),
   delete: (path) => request(path, { method: "DELETE" }),
+  // Para endpoints que devuelven un archivo (ej. descarga de backups), no
+  // JSON. request() no sirve aquí: llama response.json() incondicionalmente,
+  // lo que rompería el binario. download() es análogo pero para blobs.
+  download: (path) => requestBlob(path),
 };
+
+/**
+ * Igual que request(), pero para respuestas binarias (application/*,
+ * no JSON). Se mantiene separado de request() en vez de forzar una rama
+ * condicional ahí adentro: son dos contratos distintos (JSON vs Blob) y
+ * mezclarlos en una función hace más frágil el camino feliz de JSON que
+ * usan las otras ~13 vistas.
+ */
+async function requestBlob(path) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let response;
+  try {
+    response = await fetch(`${BASE_URL}/api${path}`, { method: "GET", headers });
+  } catch (networkError) {
+    throw new ApiError(
+      `No se pudo conectar con el backend en ${BASE_URL}. Verifica que "php artisan serve" esté corriendo.`,
+      null
+    );
+  }
+
+  if (!response.ok) {
+    // BackupController::download() manda JSON incluso en error (404/422),
+    // así que sí podemos leer un mensaje útil aquí antes de fallar.
+    const data = await response.json().catch(() => null);
+    if (response.status === 401) {
+      clearToken();
+      throw new ApiError("Tu sesión expiró. Inicia sesión de nuevo.", 401);
+    }
+    if (response.status === 403) throw new ApiError(data?.message ?? "No tienes permiso para hacer esto.", 403);
+    if (response.status === 404) throw new ApiError(data?.message ?? "El archivo solicitado no existe.", 404);
+    throw new ApiError(data?.message ?? `Error inesperado (${response.status}).`, response.status);
+  }
+
+  return response.blob();
+}
+
+/**
+ * Fuerza la descarga de un Blob al dispositivo del usuario (carpeta de
+ * Descargas por defecto del navegador). No depende de que el backend
+ * exponga el header Content-Disposition vía CORS — el nombre de archivo
+ * lo decide quien llama, que ya lo conoce (viene de generar() o listar()).
+ */
+export function triggerBrowserDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}

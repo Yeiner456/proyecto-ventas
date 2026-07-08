@@ -12,6 +12,7 @@ import {
   Shield,
   Building2,
   Bell,
+  Database,
   LogOut,
 } from "lucide-react";
 import { useAuth, esAdminGeneral } from "../../context/AuthContext";
@@ -74,6 +75,9 @@ const NAV_CONFIG = [
       // AuditoriaLogPolicy::viewAny() exige esAdminSucursal(); coincide
       // con esta lista (cajero nunca gestiona auditoría).
       { key: "auditoria", label: "Auditoría", icon: ClipboardList, path: "/auditoria", roles: ["admin_general", "admin_sucursal"] },
+      // Gate 'gestionar-backups' (AppServiceProvider): exige
+      // esAdminGeneral(), no una Policy de modelo — no hay tabla 'backups'.
+      { key: "backups", label: "Backups", icon: Database, path: "/backups", roles: ["admin_general"] },
     ],
   },
 ];

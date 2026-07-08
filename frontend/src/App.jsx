@@ -15,6 +15,7 @@ import VentasView from "./views/VentasView";
 import MetodosPagoView from "./views/MetodosPagoView";
 import NotificacionesView from "./views/NotificacionesView";
 import AuditoriaView from "./views/AuditoriaView";
+import BackupsView from "./views/BackupsView";
 import DashboardView from "./views/DashboardView";
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="/metodos-pago" element={<MetodosPagoView />} />
               <Route path="/notificaciones" element={<NotificacionesView />} />
               <Route path="/auditoria" element={<AuditoriaView />} />
+              <Route path="/backups" element={<BackupsView />} />
             </Route>
           </Route>
         </Routes>
