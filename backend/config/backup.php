@@ -20,6 +20,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Ruta al binario mysql (cliente de línea de comandos, para restaurar)
+    |--------------------------------------------------------------------------
+    | Mismo binario que mysqldump pero sin el sufijo "dump" — normalmente
+    | vive en la misma carpeta. Aplican las mismas reglas de escape que
+    | MYSQLDUMP_PATH: usa "/" en el .env, nunca "\".
+    */
+    'mysql_path' => env('MYSQL_PATH', 'C:\\xampp\\mysql\\bin\\mysql.exe'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Disco de almacenamiento
     |--------------------------------------------------------------------------
     | 'local' apunta a storage/app (privado, NO storage/app/public). Nunca

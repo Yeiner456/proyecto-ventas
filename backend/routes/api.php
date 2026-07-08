@@ -70,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('backups')->group(function () {
         Route::get('/', [BackupController::class, 'index']);
         Route::post('/', [BackupController::class, 'store']);
+        Route::post('/restaurar', [BackupController::class, 'restaurar']);
         Route::get('/{filename}/descargar', [BackupController::class, 'download']);
     });
 });

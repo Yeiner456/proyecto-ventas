@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\BackupService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -83,5 +84,32 @@ class BackupController extends Controller
         }
 
         return response()->download($ruta, basename($ruta));
+    }
+
+    /**
+     * Restaura la base de datos completa desde un archivo .sql subido.
+     * DESTRUCTIVO — ver advertencias en BackupService::restaurar().
+     */
+    public function restaurar(Request $request): JsonResponse
+    {
+        $request->validate([
+            // Se valida la extensión con una regla explícita en vez de
+            // 'mimes:sql': el detector de MIME de Laravel no reconoce
+            // ".sql" de forma confiable (puede llegar como text/plain
+            // o application/sql según el sistema operativo del usuario).
+            'archivo' => ['required', 'file', 'max:51200', function ($attribute, $value, $fail) {
+                if (strtolower($value->getClientOriginalExtension()) !== 'sql') {
+                    $fail('El archivo debe tener extensión .sql.');
+                }
+            }],
+        ]);
+
+        try {
+            $resultado = $this->backupService->restaurar($request->file('archivo'));
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+
+        return response()->json($resultado);
     }
 }

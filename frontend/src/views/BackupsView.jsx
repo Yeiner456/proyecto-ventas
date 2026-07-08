@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Database, RefreshCw, Download, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Database, RefreshCw, Download, Upload, Loader2, AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { useAuth, esAdminGeneral } from "../context/AuthContext";
 import { api, ApiError, triggerBrowserDownload } from "../services/apiClient";
 import "../styles/BackupsView.css";
@@ -36,6 +36,70 @@ function formatFecha(iso) {
   return new Date(iso).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
 }
 
+/**
+ * Confirmación reforzada: como restaurar sobrescribe TODA la base de
+ * datos (el .sql empieza con DROP TABLE por cada tabla), un simple
+ * "¿seguro?" no es suficiente advertencia. Se exige escribir RESTAURAR
+ * textualmente para habilitar el botón — mismo espíritu que los demás
+ * modales de confirmación del proyecto (ConfirmDeleteModal en
+ * UsuariosView), pero con una fricción extra deliberada acorde al riesgo.
+ */
+function RestaurarModal({ archivo, onCancel, onConfirm, restaurando, error }) {
+  const [confirmText, setConfirmText] = useState("");
+  const habilitado = confirmText.trim().toUpperCase() === "RESTAURAR";
+
+  return (
+    <div className="modal-overlay" onMouseDown={onCancel}>
+      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">Restaurar base de datos</h3>
+          <button className="modal-close" onClick={onCancel}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="alert alert-danger">
+          <AlertTriangle size={16} className="u-icon-inline" />
+          <span>
+            Esto reemplaza <strong>toda</strong> la base de datos actual con el contenido de{" "}
+            <strong>{archivo.name}</strong>. Todo lo registrado después de la fecha de ese backup
+            se perderá. Esta acción no se puede deshacer directamente (aunque se genera un backup
+            del estado actual justo antes, por si hay que volver atrás).
+          </span>
+        </div>
+
+        <p className="u-confirm-text">
+          Para confirmar, escribe <strong>RESTAURAR</strong> en el campo:
+        </p>
+        <input
+          className="field-input u-mb-10"
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder="RESTAURAR"
+          disabled={restaurando}
+          autoFocus
+        />
+
+        {error && (
+          <div className="alert alert-danger">
+            <AlertTriangle size={16} className="u-icon-inline" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button className="btn btn-outline" onClick={onCancel} disabled={restaurando}>
+            Cancelar
+          </button>
+          <button className="btn btn-danger" onClick={onConfirm} disabled={!habilitado || restaurando}>
+            {restaurando ? "Restaurando..." : "Restaurar base de datos"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BackupsView() {
   const { usuario: actor } = useAuth();
   const autorizado = esAdminGeneral(actor);
@@ -46,6 +110,12 @@ export default function BackupsView() {
   const [descargando, setDescargando] = useState(null); // filename en curso, o null
   const [error, setError] = useState(null);
   const [mensaje, setMensaje] = useState(null);
+
+  const [archivoSeleccionado, setArchivoSeleccionado] = useState(null);
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
+  const [restaurando, setRestaurando] = useState(false);
+  const [errorRestaurar, setErrorRestaurar] = useState(null);
+  const inputArchivoRef = useRef(null);
 
   const cargarBackups = useCallback(async () => {
     setCargando(true);
@@ -90,6 +160,32 @@ export default function BackupsView() {
       setError(e instanceof ApiError ? e.message : "No se pudo generar el backup.");
     } finally {
       setGenerando(false);
+    }
+  }
+
+  async function restaurarBackup() {
+    if (!archivoSeleccionado) return;
+    setRestaurando(true);
+    setErrorRestaurar(null);
+    try {
+      const formData = new FormData();
+      formData.append("archivo", archivoSeleccionado);
+      const resultado = await api.uploadFile("/backups/restaurar", formData);
+      setMostrarConfirmacion(false);
+      setArchivoSeleccionado(null);
+      if (inputArchivoRef.current) inputArchivoRef.current.value = "";
+      setError(null);
+      setMensaje(
+        `Base de datos restaurada correctamente. Se generó un backup del estado anterior: ${resultado.backup_previo}.`
+      );
+      await cargarBackups();
+    } catch (e) {
+      // El error se muestra DENTRO del modal (no se cierra), para que el
+      // usuario pueda reintentar sin tener que volver a seleccionar el
+      // archivo y volver a escribir "RESTAURAR".
+      setErrorRestaurar(e instanceof ApiError ? e.message : "No se pudo restaurar el backup.");
+    } finally {
+      setRestaurando(false);
     }
   }
 
@@ -144,6 +240,31 @@ export default function BackupsView() {
         </button>
       </div>
 
+      <div className="bv-restore-card">
+        <h2 className="bv-restore-title">Restaurar desde un archivo</h2>
+        <p className="text-muted bv-subtitle">
+          Sube un backup .sql (por ejemplo, uno que hayas descargado antes) para reemplazar la
+          base de datos actual con su contenido.
+        </p>
+        <div className="u-flex-gap-10">
+          <input
+            ref={inputArchivoRef}
+            type="file"
+            accept=".sql"
+            className="field-input"
+            onChange={(e) => setArchivoSeleccionado(e.target.files?.[0] ?? null)}
+          />
+          <button
+            className="btn btn-danger-ghost"
+            disabled={!archivoSeleccionado}
+            onClick={() => setMostrarConfirmacion(true)}
+          >
+            <Upload size={14} />
+            Restaurar este archivo
+          </button>
+        </div>
+      </div>
+
       <div className="data-table-card">
         <table className="data-table">
           <thead>
@@ -189,6 +310,20 @@ export default function BackupsView() {
           </tbody>
         </table>
       </div>
+
+      {mostrarConfirmacion && archivoSeleccionado && (
+        <RestaurarModal
+          archivo={archivoSeleccionado}
+          restaurando={restaurando}
+          error={errorRestaurar}
+          onCancel={() => {
+            if (restaurando) return; // no cerrar a mitad de una restauración en curso
+            setMostrarConfirmacion(false);
+            setErrorRestaurar(null);
+          }}
+          onConfirm={restaurarBackup}
+        />
+      )}
     </div>
   );
 }

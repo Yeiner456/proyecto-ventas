@@ -6,6 +6,9 @@
 .bv-subtitle { max-width: 560px; }
 .bv-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 
+.bv-restore-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; }
+.bv-restore-title { font-family: var(--font-display); font-weight: 700; font-size: 16px; margin: 0 0 4px 0; }
+
 /* Ícono de "cargando" girando (Loader2 / RefreshCw de lucide-react) */
 .bv-spin { animation: bv-spin-rotate 0.8s linear infinite; }
 

@@ -104,7 +104,49 @@ export const api = {
   // JSON. request() no sirve aquí: llama response.json() incondicionalmente,
   // lo que rompería el binario. download() es análogo pero para blobs.
   download: (path) => requestBlob(path),
+  // Para subir archivos (multipart/form-data). Distinto de post(): no se
+  // debe fijar Content-Type a mano (el navegador pone el boundary del
+  // multipart automáticamente) ni serializar el body con JSON.stringify.
+  uploadFile: (path, formData) => requestFormData(path, formData),
 };
+
+/**
+ * Sube un FormData (multipart). Igual que requestBlob(), se mantiene
+ * separado de request() porque el contrato de envío es distinto
+ * (FormData, no JSON) aunque la respuesta sí sea JSON normal.
+ */
+async function requestFormData(path, formData) {
+  const headers = { Accept: "application/json" };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let response;
+  try {
+    response = await fetch(`${BASE_URL}/api${path}`, { method: "POST", headers, body: formData });
+  } catch (networkError) {
+    throw new ApiError(
+      `No se pudo conectar con el backend en ${BASE_URL}. Verifica que "php artisan serve" esté corriendo.`,
+      null
+    );
+  }
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearToken();
+      throw new ApiError("Tu sesión expiró. Inicia sesión de nuevo.", 401);
+    }
+    if (response.status === 422) {
+      const primerError = data?.errors ? Object.values(data.errors)[0]?.[0] : null;
+      throw new ApiError(primerError ?? data?.message ?? "Datos inválidos.", 422, data?.errors);
+    }
+    if (response.status === 403) throw new ApiError(data?.message ?? "No tienes permiso para hacer esto.", 403);
+    throw new ApiError(data?.message ?? `Error inesperado (${response.status}).`, response.status);
+  }
+
+  return data;
+}
 
 /**
  * Igual que request(), pero para respuestas binarias (application/*,
