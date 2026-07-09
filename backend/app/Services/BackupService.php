@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
@@ -61,7 +62,16 @@ class BackupService
         // pueden listar los argumentos de un proceso en ejecución).
         // MYSQL_PWD como variable de entorno del subproceso es la forma
         // segura de pasarla.
-        $resultado = Process::env(['MYSQL_PWD' => $conexion['password'] ?? ''])
+        //
+        // SystemRoot también se pasa explícitamente: en Windows, un
+        // proceso hijo lanzado con un entorno personalizado puede quedar
+        // sin esta variable, y sin ella Winsock no logra inicializarse
+        // (mysqldump falla con "Can't create TCP/IP socket (10106)"
+        // aunque MySQL esté corriendo y las credenciales sean correctas).
+        $resultado = Process::env([
+            'MYSQL_PWD' => $conexion['password'] ?? '',
+            'SystemRoot' => getenv('SystemRoot'),
+        ])
             ->timeout(300)
             ->run($comando);
 
@@ -131,6 +141,91 @@ class BackupService
         }
 
         return $eliminados;
+    }
+
+    /**
+     * Restaura la base de datos completa a partir de un archivo .sql
+     * subido por el usuario. DESTRUCTIVO: sobrescribe todos los datos
+     * actuales (el dump empieza con DROP TABLE IF EXISTS por cada tabla).
+     *
+     * Por eso, antes de tocar la base de datos, SIEMPRE se genera un
+     * backup de seguridad del estado actual. Si ese backup de seguridad
+     * falla, se aborta la restauración completa — preferimos no
+     * restaurar a restaurar sin red de seguridad.
+     *
+     * @return array{restaurado: bool, backup_previo: string}
+     */
+    public function restaurar(UploadedFile $archivo): array
+    {
+        if (strtolower($archivo->getClientOriginalExtension()) !== 'sql') {
+            throw new RuntimeException('El archivo debe tener extensión .sql.');
+        }
+
+        // Red de seguridad: si esto falla, no seguimos. Una restauración
+        // sin poder deshacerla es exactamente el escenario que este
+        // sistema existe para evitar.
+        $backupPrevio = $this->generar();
+
+        $connection = config('database.default');
+        $conexion = config("database.connections.{$connection}");
+
+        $rutaTemporal = $archivo->store('backups/tmp');
+        $rutaAbsoluta = Storage::disk($this->disk)->path($rutaTemporal);
+
+        $comando = [
+            config('backup.mysql_path'),
+            '--host=' . $conexion['host'],
+            '--port=' . $conexion['port'],
+            '--user=' . $conexion['username'],
+            $conexion['database'],
+        ];
+
+        // Mismas dos reglas de seguridad que en generar(): la contraseña
+        // viaja como variable de entorno (nunca como argumento visible),
+        // y SystemRoot se pasa explícitamente para que Winsock inicialice
+        // bien en Windows (mismo bug que ya resolvimos en generar()).
+        $handle = fopen($rutaAbsoluta, 'r');
+
+        try {
+            $resultado = Process::env([
+                'MYSQL_PWD' => $conexion['password'] ?? '',
+                'SystemRoot' => getenv('SystemRoot'),
+            ])
+                ->input($handle)
+                ->timeout(300)
+                ->run($comando);
+        } finally {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+            Storage::disk($this->disk)->delete($rutaTemporal);
+        }
+
+        if (!$resultado->successful()) {
+            Log::error('Fallo al restaurar backup de base de datos', [
+                'exit_code' => $resultado->exitCode(),
+                'error' => $resultado->errorOutput(),
+                'backup_previo' => $backupPrevio['filename'],
+            ]);
+
+            throw new RuntimeException(
+                "No se pudo completar la restauración. Como el archivo se ejecuta " .
+                "sentencia por sentencia, es posible que la base de datos haya quedado " .
+                "en un estado parcial. Se generó un backup del estado ANTERIOR al intento " .
+                "de restauración: {$backupPrevio['filename']}. Restaura ese archivo para " .
+                "volver al estado anterior, y revisa el log de Laravel para el detalle técnico."
+            );
+        }
+
+        Log::info('Base de datos restaurada desde backup', [
+            'archivo_subido' => $archivo->getClientOriginalName(),
+            'backup_previo' => $backupPrevio['filename'],
+        ]);
+
+        return [
+            'restaurado' => true,
+            'backup_previo' => $backupPrevio['filename'],
+        ];
     }
 
     /**

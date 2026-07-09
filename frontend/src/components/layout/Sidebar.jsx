@@ -16,6 +16,9 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAuth, esAdminGeneral } from "../../context/AuthContext";
+import { /* ...los que ya tienes... */ FileBarChart } from "lucide-react";
+
+
 
 /* ============================================================================
  * Sidebar — responsabilidad única: navegación global filtrada por rol.
@@ -78,6 +81,7 @@ const NAV_CONFIG = [
       // Gate 'gestionar-backups' (AppServiceProvider): exige
       // esAdminGeneral(), no una Policy de modelo — no hay tabla 'backups'.
       { key: "backups", label: "Backups", icon: Database, path: "/backups", roles: ["admin_general"] },
+      { key: "reportes", label: "Reportes", icon: FileBarChart, path: "/reportes", roles: ["admin_general", "admin_sucursal"] },
     ],
   },
 ];

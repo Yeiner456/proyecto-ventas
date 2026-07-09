@@ -1,0 +1,113 @@
+/* ============================================================================
+ * ReportesView.css
+ * ----------------------------------------------------------------------------
+ * Sigue la misma convención BEM-lite que el resto de las vistas (bv-, av-,
+ * pv-...): reutiliza las clases globales de theme.css (.page-title,
+ * .section-title, .text-muted, .field-select, .field-label, .field-help,
+ * .btn, .btn-outline, .btn-sm, .alert, .alert-danger) y solo define aquí
+ * lo genuinamente nuevo de esta pantalla: el layout de tarjetas y el
+ * selector de sucursal.
+ * ==========================================================================*/
+
+.rv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.rv-subtitle {
+  max-width: 560px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.rv-picker-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  max-width: 360px;
+}
+
+.rv-select {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.rv-lock-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.rv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.rv-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rv-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--green-soft);
+  color: var(--sena-green-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.rv-card-title {
+  margin: 0 0 4px 0;
+}
+
+.rv-card-desc {
+  margin: 0 0 16px 0;
+  flex-grow: 1;
+}
+
+.rv-card-error {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.rv-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.rv-card-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.rv-spin {
+  animation: rv-spin-rotate 0.8s linear infinite;
+}
+
+@keyframes rv-spin-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

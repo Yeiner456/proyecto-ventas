@@ -17,6 +17,9 @@ import NotificacionesView from "./views/NotificacionesView";
 import AuditoriaView from "./views/AuditoriaView";
 import BackupsView from "./views/BackupsView";
 import DashboardView from "./views/DashboardView";
+import ReportesView from "./views/ReportesView";
+// ...
+
 
 export default function App() {
   return (
@@ -42,6 +45,7 @@ export default function App() {
               <Route path="/notificaciones" element={<NotificacionesView />} />
               <Route path="/auditoria" element={<AuditoriaView />} />
               <Route path="/backups" element={<BackupsView />} />
+              <Route path="/reportes" element={<ReportesView />} />
             </Route>
           </Route>
         </Routes>
