@@ -8,40 +8,43 @@ import {
   nombreCategoria,
   inventario as inventarioSeed,
   metodosPago as metodosPagoSeed,
-  facturas as facturasSeed,
 } from "../mocks/seedData";
+import { api, ApiError } from "../services/apiClient";
+import ComprobanteModal from "../components/ComprobanteModal";
 import "../styles/NuevaVentaView.css";
 
 /* ============================================================================
  * NUEVA VENTA — POS del cajero
  * ----------------------------------------------------------------------------
- * FLUJO REAL (esto es lo importante de esta vista, más que el layout):
+ * FLUJO REAL, ya conectado:
  *
- *   1. POST /api/ventas            -> nace en 'pendiente'. NO descuenta
+ *   1. POST /api/ventas               -> nace en 'pendiente'. NO descuenta
  *      stock ni genera factura (VentaController::store()).
- *   2. PATCH /api/ventas/{id}/estado  { estado: 'pagado' } -> AQUÍ SÍ se
+ *   2. Si el método de pago exige comprobante (MetodoPago.requiere_comp) ->
+ *      se abre ComprobanteModal, el cajero toma foto o adjunta archivo ->
+ *      POST /api/comprobantes-pago.
+ *   3. PATCH /api/ventas/{id}/estado { estado: 'pagado' } -> AQUÍ SÍ se
  *      descuenta inventario (InventarioService::descontar) y se genera
  *      la factura (FacturaService::generarParaVenta), dentro de una
  *      transacción (VentaController::cambiarEstado()).
  *
- * Por qué dos llamadas y no una: StoreVentaRequest técnicamente permite
- * mandar 'estado' => 'pagado' desde el primer POST, pero si se hace así
- * NINGÚN efecto secundario se dispara (el descuento de stock y la
- * factura viven solo dentro de cambiarEstado()). Crear directo en
- * 'pagado' produciría ventas "pagadas" con inventario sin tocar y sin
- * factura — un bug silencioso. El botón "Cobrar" de abajo replica el
- * camino de 2 pasos a propósito.
+ * El comprobante se sube ANTES del PATCH a 'pagado' a propósito: si algo
+ * falla a mitad de camino, la venta se queda en 'pendiente' sin haber
+ * tocado el stock — nunca queda una venta "pagada" sin comprobante ni con
+ * inventario ya descontado por un error de red.
  *
- * VentaPolicy::create = admin_sucursal || cajero (admin_general entra
- * por before(), pero no tiene sucursal propia — no tendría sentido que
- * operara una caja — por eso esta vista se bloquea para admin_general y
- * contador, igual que ya está oculta en la Sidebar).
+ * VentaPolicy::create = admin_sucursal || cajero (admin_general entra por
+ * before(), pero no tiene sucursal propia — no tendría sentido que operara
+ * una caja — por eso esta vista se bloquea para admin_general).
  *
- * LIMITACIÓN DE ESTE PROTOTIPO: el stock y las ventas se llevan en
- * estado local de React (useState), no en un backend real. Al recargar
- * la página, todo vuelve a los valores del seed. Cuando se conecte la
- * API, cada acción aquí se vuelve una llamada real y esta limitación
- * desaparece sola.
+ * LIMITACIÓN PENDIENTE (fuera del alcance de este cambio): el catálogo de
+ * productos, categorías, inventario y métodos de pago que se muestran acá
+ * siguen viniendo de mocks/seedData.js, no de GET /api/productos,
+ * /api/inventario, /api/categorias-productos ni /api/metodos-pago. La
+ * venta y el descuento de stock SÍ quedan bien registrados en la base de
+ * datos real con este cambio; lo que puede quedar desactualizado es lo
+ * que ve el cajero en pantalla (stock, catálogo) hasta que se conecte
+ * también esa parte.
  * ==========================================================================*/
 
 function puedeVender(actor) {
@@ -51,9 +54,6 @@ function puedeVender(actor) {
 function formatMoney(n) {
   return `$${Number(n).toLocaleString("es-CO")}`;
 }
-
-const wait = (ms = 350) => new Promise((res) => setTimeout(res, ms));
-
 
 function AjustePrecioModal({ item, onCancel, onSave }) {
   const [precio, setPrecio] = useState(item.precio_unitario_venta);
@@ -76,7 +76,12 @@ function AjustePrecioModal({ item, onCancel, onSave }) {
         </div>
         <div className="field">
           <label className="field-label">Motivo del ajuste (queda registrado)</label>
-          <input className="field-input" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="ej. cliente frecuente, producto por vencer..." />
+          <input
+            className="field-input"
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
+            placeholder="ej. cliente frecuente, producto por vencer..."
+          />
         </div>
         <div className="modal-actions">
           <button className="btn btn-outline" onClick={onCancel}>Cancelar</button>
@@ -122,7 +127,12 @@ export default function NuevaVentaView() {
   const [cobrando, setCobrando] = useState(false);
   const [error, setError] = useState(null);
   const [facturaGenerada, setFacturaGenerada] = useState(null);
-  const [correlativoFactura, setCorrelativoFactura] = useState(facturasSeed.length);
+
+  // Estado del paso "comprobante de pago" (nuevo)
+  const [ventaPendiente, setVentaPendiente] = useState(null); // venta creada en POST, esperando comprobante
+  const [mostrarComprobante, setMostrarComprobante] = useState(false);
+  const [subiendoComprobante, setSubiendoComprobante] = useState(false);
+  const [errorComprobante, setErrorComprobante] = useState(null);
 
   const productosSucursal = useMemo(() => productosSeed.filter((p) => p.sucursal_id === sucursalId && p.activo), [sucursalId]);
   const categorias = useMemo(() => categoriasDeSucursal(sucursalId), [sucursalId]);
@@ -180,7 +190,7 @@ export default function NuevaVentaView() {
           if (nuevaCantidad <= 0) return null;
           if (producto?.maneja_stock) {
             const stockTotal = stockLocal[producto_id] ?? 0;
-            if (nuevaCantidad > stockTotal) return i; // no deja pasar del stock real
+            if (nuevaCantidad > stockTotal) return i; // no deja pasar del stock local
           }
           return { ...i, cantidad: nuevaCantidad };
         })
@@ -209,46 +219,92 @@ export default function NuevaVentaView() {
     setError(null);
   }
 
+  function construirDetalles() {
+    return cart.map((item) => ({
+      producto_id: item.producto_id,
+      cantidad: item.cantidad,
+      ...(item.ajuste_precio
+        ? { precio_unitario_venta: item.precio_unitario_venta, observacion_ajuste: item.observacion_ajuste }
+        : {}),
+    }));
+  }
+
+  async function finalizarPago(ventaId) {
+    const ventaPagada = await api.patch(`/ventas/${ventaId}/estado`, { estado: "pagado" });
+    setFacturaGenerada(ventaPagada.factura);
+    setVentaPendiente(null);
+    setMostrarComprobante(false);
+    setCart([]);
+    setObservacion("");
+  }
+
   async function cobrar() {
     if (cart.length === 0 || !metodoPagoId) return;
-    setCobrando(true);
     setError(null);
+    setCobrando(true);
     try {
-      // Paso 1: POST /api/ventas -> nace 'pendiente' (simulado)
-      await wait();
-      const ventaId = Date.now();
-
-      // Paso 2: PATCH /api/ventas/{id}/estado { estado: 'pagado' }
-      // Aquí es donde el backend real descuenta inventario y factura.
-      await wait();
-      for (const item of cart) {
-        if (item.maneja_stock) {
-          const disponible = stockLocal[item.producto_id] ?? 0;
-          if (disponible < item.cantidad) {
-            throw new Error(`Stock insuficiente para "${item.nombre}". Disponible: ${disponible}.`);
-          }
-        }
-      }
-      setStockLocal((prev) => {
-        const copia = { ...prev };
-        cart.forEach((item) => {
-          if (item.maneja_stock) copia[item.producto_id] = (copia[item.producto_id] ?? 0) - item.cantidad;
-        });
-        return copia;
+      // Paso 1: nace 'pendiente'. Todavía no descuenta stock ni factura.
+      const venta = await api.post("/ventas", {
+        metodo_pago_id: Number(metodoPagoId),
+        observacion: observacion.trim() || null,
+        detalles: construirDetalles(),
       });
 
-      const siguiente = correlativoFactura + 1;
-      setCorrelativoFactura(siguiente);
-      const numero = `SUC${String(sucursalId).padStart(2, "0")}-${String(siguiente).padStart(6, "0")}`;
+      if (metodoSeleccionado?.requiere_comp) {
+        // Este método exige comprobante: la venta queda 'pendiente' hasta
+        // que el cajero suba la foto/archivo. El modal llama a
+        // finalizarPago() cuando el comprobante ya se subió.
+        setVentaPendiente(venta);
+        setMostrarComprobante(true);
+        return;
+      }
 
-      setFacturaGenerada({ id_factura: ventaId, numero_factura: numero, venta_id: ventaId, total });
-      setCart([]);
-      setObservacion("");
+      // Sin comprobante requerido: se confirma el pago directo.
+      await finalizarPago(venta.id_venta);
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof ApiError ? err.message : "No se pudo registrar la venta. Intenta de nuevo.");
     } finally {
       setCobrando(false);
     }
+  }
+
+  async function confirmarComprobante(archivo) {
+    if (!ventaPendiente) return;
+    setSubiendoComprobante(true);
+    setErrorComprobante(null);
+    try {
+      const formData = new FormData();
+      formData.append("venta_id", ventaPendiente.id_venta);
+      formData.append("archivo", archivo);
+      await api.uploadFile("/comprobantes-pago", formData);
+
+      // Con el comprobante ya guardado, recién ahora se confirma el pago:
+      // descuenta stock y genera factura.
+      await finalizarPago(ventaPendiente.id_venta);
+    } catch (err) {
+      setErrorComprobante(err instanceof ApiError ? err.message : "No se pudo subir el comprobante.");
+    } finally {
+      setSubiendoComprobante(false);
+    }
+  }
+
+  async function cancelarComprobante() {
+    // El cajero se arrepintió a mitad del cobro: cancelamos la venta
+    // 'pendiente' en el backend para no dejar registros huérfanos.
+    if (ventaPendiente) {
+      try {
+        await api.patch(`/ventas/${ventaPendiente.id_venta}/estado`, {
+          estado: "cancelado",
+          motivo: "Cancelada por el cajero antes de completar el comprobante",
+        });
+      } catch {
+        // si ni siquiera se pudo cancelar, queda 'pendiente'; se puede
+        // resolver luego desde Registro de ventas.
+      }
+    }
+    setVentaPendiente(null);
+    setMostrarComprobante(false);
+    setErrorComprobante(null);
   }
 
   if (!autorizado) {
@@ -386,7 +442,7 @@ export default function NuevaVentaView() {
           {metodoSeleccionado?.requiere_comp && (
             <div className="alert alert-info u-alert-sm">
               <Info size={14} className="u-icon-inline" />
-              <span>Este método pide comprobante. Se sube después de cobrar (pantalla de comprobantes, aún no construida).</span>
+              <span>Este método pide comprobante. Al cobrar te voy a pedir tomar la foto o adjuntarlo antes de finalizar la venta.</span>
             </div>
           )}
 
@@ -423,6 +479,16 @@ export default function NuevaVentaView() {
 
       {ajustando && (
         <AjustePrecioModal item={ajustando} onCancel={() => setAjustando(null)} onSave={guardarAjuste} />
+      )}
+
+      {mostrarComprobante && ventaPendiente && (
+        <ComprobanteModal
+          ventaId={ventaPendiente.id_venta}
+          subiendo={subiendoComprobante}
+          error={errorComprobante}
+          onConfirmar={confirmarComprobante}
+          onCancelar={cancelarComprobante}
+        />
       )}
 
       {facturaGenerada && (
