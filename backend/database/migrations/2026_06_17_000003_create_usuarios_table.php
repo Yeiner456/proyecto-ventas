@@ -13,7 +13,6 @@ return new class extends Migration
             $table->unsignedInteger('sucursal_id')->nullable();  // NULL = admin general (sin sucursal)
             $table->unsignedInteger('rol_id');
             $table->string('nombre', 100);
-            $table->string('email', 150)->unique();
             $table->string('password_hash', 255);
             $table->boolean('activo')->default(true);
             $table->timestamps();

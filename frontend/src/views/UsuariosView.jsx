@@ -93,13 +93,12 @@ function FieldWrap({ children }) {
   return <div className="field">{children}</div>;
 }
 
-function UserFormModal({ actor, initial, onCancel, onSubmit, saving, existentes }) {
+function UserFormModal({ actor, initial, onCancel, onSubmit, saving }) {
   const isEdit = Boolean(initial);
   const admin = actorEsAdminGeneral(actor);
   const sucursalActorId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal ?? null;
 
   const [nombre, setNombre] = useState(initial?.nombre ?? "");
-  const [email, setEmail] = useState(initial?.email ?? "");
   const [rolId, setRolId] = useState(initial?.rol_id ?? "");
   const [sucursalId, setSucursalId] = useState(
     initial ? initial.sucursal_id : admin ? "" : sucursalActorId
@@ -117,16 +116,11 @@ function UserFormModal({ actor, initial, onCancel, onSubmit, saving, existentes 
     ? rolesSeed.filter((r) => r.activo || r.id_rol === initial?.rol_id)
     : rolesSeed.filter((r) => r.nombre !== "admin_general" && (r.activo || r.id_rol === initial?.rol_id));
 
-  const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const emailDuplicado = existentes.some(
-    (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.id_usuario !== initial?.id_usuario
-  );
   const passwordValida = isEdit ? password === "" || password.length >= 8 : password.length >= 8;
   const sucursalRequerida = !esRolAdminGeneral;
   const sucursalValida = !sucursalRequerida || Boolean(sucursalId);
 
-  const formValido =
-    nombre.trim() && emailValido && !emailDuplicado && rolId && passwordValida && sucursalValida;
+  const formValido = nombre.trim() && rolId && passwordValida && sucursalValida;
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -135,7 +129,6 @@ function UserFormModal({ actor, initial, onCancel, onSubmit, saving, existentes 
 
     const payload = {
       nombre: nombre.trim(),
-      email: email.trim(),
       rol_id: Number(rolId),
       sucursal_id: esRolAdminGeneral ? null : Number(sucursalId),
       activo,
@@ -154,22 +147,11 @@ function UserFormModal({ actor, initial, onCancel, onSubmit, saving, existentes 
           </button>
         </div>
 
-        <div className="uv-form-grid-2">
-          <FieldWrap>
-            <label className="field-label">Nombre completo</label>
-            <input className="field-input" value={nombre} onChange={(e) => setNombre(e.target.value)} />
-            {touched && !nombre.trim() && <p className="field-help error">El nombre es obligatorio.</p>}
-          </FieldWrap>
-
-          <FieldWrap>
-            <label className="field-label">Email</label>
-            <input className="field-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            {touched && !emailValido && <p className="field-help error">Ingresa un email válido.</p>}
-            {touched && emailValido && emailDuplicado && (
-              <p className="field-help error">Ya existe un usuario con este email.</p>
-            )}
-          </FieldWrap>
-        </div>
+        <FieldWrap>
+          <label className="field-label">Nombre completo</label>
+          <input className="field-input" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+          {touched && !nombre.trim() && <p className="field-help error">El nombre es obligatorio.</p>}
+        </FieldWrap>
 
         <div className="uv-form-grid-2">
           <FieldWrap>
@@ -304,12 +286,7 @@ export default function UsuariosView() {
     return usuarios
       .filter((u) => usuarioVisibleParaActor(actor, u))
       .filter((u) => !filtroRol || u.rol_id === Number(filtroRol))
-      .filter(
-        (u) =>
-          !busqueda.trim() ||
-          u.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-          u.email.toLowerCase().includes(busqueda.toLowerCase())
-      );
+      .filter((u) => !busqueda.trim() || u.nombre.toLowerCase().includes(busqueda.toLowerCase()));
   }, [usuarios, actor, filtroRol, busqueda]);
 
   const stats = useMemo(() => {
@@ -411,7 +388,7 @@ export default function UsuariosView() {
           <Search size={15} />
           <input
             className="field-input"
-            placeholder="Buscar por nombre o email..."
+            placeholder="Buscar por nombre..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
@@ -435,7 +412,6 @@ export default function UsuariosView() {
           <thead>
             <tr>
               <th>Usuario</th>
-              <th>Email</th>
               <th>Rol</th>
               <th>Sucursal</th>
               <th>Estado</th>
@@ -445,7 +421,7 @@ export default function UsuariosView() {
           <tbody>
             {visibles.length === 0 ? (
               <tr className="empty-row">
-                <td colSpan={6}>No hay usuarios que coincidan con el filtro.</td>
+                <td colSpan={5}>No hay usuarios que coincidan con el filtro.</td>
               </tr>
             ) : (
               visibles.map((u) => (
@@ -456,7 +432,6 @@ export default function UsuariosView() {
                       {u.id_usuario === actor.id_usuario && <span className="uv-you-tag">Tú</span>}
                     </div>
                   </td>
-                  <td>{u.email}</td>
                   <td>
                     <span className="badge badge-neutral">{nombreRol(u.rol_id)}</span>
                   </td>
@@ -503,7 +478,6 @@ export default function UsuariosView() {
           actor={actor}
           initial={formModal.mode === "edit" ? formModal.usuario : null}
           saving={saving}
-          existentes={usuarios}
           onCancel={() => setFormModal(null)}
           onSubmit={handleSubmit}
         />

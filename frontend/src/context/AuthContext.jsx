@@ -7,7 +7,7 @@ import { api, getToken, setToken, clearToken } from "../services/apiClient";
  * ----------------------------------------------------------------------------
  * PUNTO DE ADAPTACIÓN (lo más importante de este archivo):
  * La API devuelve el usuario con relaciones anidadas:
- *   { id_usuario, nombre, email, activo, sucursal_id,
+ *   { id_usuario, nombre, activo, sucursal_id,
  *     rol: { id_rol, nombre }, sucursal: { id_sucursal, nombre, ... } | null }
  *
  * Pero las 13 vistas que ya existen (Sidebar, UsuariosView, VentasView...)
@@ -39,7 +39,6 @@ function adaptarUsuario(usuarioApi) {
   return {
     id_usuario: usuarioApi.id_usuario,
     nombre: usuarioApi.nombre,
-    email: usuarioApi.email,
     rol: usuarioApi.rol?.nombre ?? null,
     sucursal: usuarioApi.sucursal?.nombre ?? null,
   };

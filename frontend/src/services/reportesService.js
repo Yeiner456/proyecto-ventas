@@ -105,7 +105,6 @@ export const TIPOS_REPORTE = [
     sucursalDe: (fila) => fila.sucursal_id,
     columnas: [
       { header: "Nombre", accessor: (f) => f.nombre },
-      { header: "Email", accessor: (f) => f.email },
       { header: "Rol", accessor: (f) => f.rol?.nombre ?? "—" },
       { header: "Sucursal", accessor: (f) => f.sucursal?.nombre ?? "—" },
       { header: "Activo", accessor: (f) => (f.activo ? "Sí" : "No") },

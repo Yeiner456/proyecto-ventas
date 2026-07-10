@@ -360,7 +360,7 @@ function UsersByRoleModal({ role, usuarios, onClose }) {
             <div className="rv-user-mini" key={u.id_usuario}>
               <div>
                 <div className="rv-user-mini-name">{u.nombre}</div>
-                <div className="rv-user-mini-email">{u.email} · {u.sucursal}</div>
+                <div className="rv-user-mini-sub">{u.sucursal}</div>
               </div>
               <Badge tone={u.activo ? "success" : "neutral"}>
                 {u.activo ? "Activo" : "Inactivo"}
@@ -508,7 +508,6 @@ export default function RolesView() {
             <thead>
               <tr>
                 <th>Usuario</th>
-                <th>Email</th>
                 <th>Rol</th>
                 <th>Sucursal</th>
                 <th>Estado</th>
@@ -517,7 +516,7 @@ export default function RolesView() {
             <tbody>
               {usuarios.length === 0 ? (
                 <tr className="rv-empty-row">
-                  <td colSpan={5}>No hay usuarios registrados.</td>
+                  <td colSpan={4}>No hay usuarios registrados.</td>
                 </tr>
               ) : (
                 usuarios.map((u) => {
@@ -525,11 +524,6 @@ export default function RolesView() {
                   return (
                     <tr key={u.id_usuario}>
                       <td>{u.nombre}</td>
-                      <td>
-                        <a className="rv-email-link" href={`mailto:${u.email}`}>
-                          {u.email}
-                        </a>
-                      </td>
                       <td>
                         <Badge tone={rol ? "success" : "neutral"}>
                           {rol ? rol.nombre : "Sin rol"}
