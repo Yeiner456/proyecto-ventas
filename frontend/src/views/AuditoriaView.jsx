@@ -1,30 +1,27 @@
-import React, { useState, useMemo } from "react";
-import { ClipboardList, X, AlertTriangle, Search } from "lucide-react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { ClipboardList, X, AlertTriangle, Search, Loader2 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import { auditoriaLogs as auditoriaLogsSeed, usuarios as usuariosSeed, sucursales as sucursalesSeed, nombreSucursal } from "../mocks/seedData";
+import { api, ApiError } from "../services/apiClient";
 import "../styles/AuditoriaView.css";
 
 /* ============================================================================
  * AUDITORÍA — Vista de solo lectura
  * ----------------------------------------------------------------------------
+ * Contrato real: GET /api/auditoria-logs (paginado, scoped por sucursal).
  * AuditoriaLogController expone únicamente index/show. Se llena sola desde
  * FiltraPorSucursal::registrarAuditoria(), llamado por otros controladores
  * en acciones sensibles (crear venta, cambiar estado, ajustar inventario...).
  *
  * AuditoriaLogPolicy::viewAny() exige esAdminSucursal() — por eso esta
- * pantalla NO está en la Sidebar para 'cajero' ni 'contador'. Este último
- * caso ya lo señalé antes (en Sidebar.jsx): un contador probablemente
- * debería poder auditar, pero la Policy actual no se lo permite. Lo dejo
- * fiel al backend tal como está.
+ * pantalla NO está en la Sidebar para 'cajero'. Este último caso ya lo
+ * señalé antes (en Sidebar.jsx). Lo dejo fiel al backend tal como está.
+ *
+ * GET /api/auditoria-logs ya viene con 'usuario' y 'sucursal' anidados
+ * (AuditoriaLogController::index hace ->with(['usuario', 'sucursal'])).
  * ==========================================================================*/
 
 function puedeVer(actor) {
   return actorEsAdminGeneral(actor) || actor.rol === "admin_sucursal";
-}
-
-function nombreUsuario(id_usuario) {
-  if (!id_usuario) return "Sistema";
-  return usuariosSeed.find((u) => u.id_usuario === id_usuario)?.nombre ?? `Usuario #${id_usuario}`;
 }
 
 function formatFecha(iso) {
@@ -39,7 +36,6 @@ const ACCION_LABEL = {
   login: "Inició sesión",
 };
 
-
 function DetalleModal({ log, onClose }) {
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
@@ -52,8 +48,8 @@ function DetalleModal({ log, onClose }) {
         </div>
 
         <div className="av-detalle-grid">
-          <div><div className="field-help">Usuario</div>{nombreUsuario(log.usuario_id)}</div>
-          <div><div className="field-help">Sucursal</div>{log.sucursal_id ? nombreSucursal(log.sucursal_id) : "—"}</div>
+          <div><div className="field-help">Usuario</div>{log.usuario?.nombre ?? "Sistema"}</div>
+          <div><div className="field-help">Sucursal</div>{log.sucursal?.nombre ?? "—"}</div>
           <div><div className="field-help">Fecha</div>{formatFecha(log.created_at)}</div>
           <div><div className="field-help">IP</div><span className="text-mono">{log.ip_address ?? "—"}</span></div>
           <div><div className="field-help">Tabla afectada</div>{log.tabla_afectada ?? "—"}</div>
@@ -85,25 +81,43 @@ export default function AuditoriaView() {
   const { usuario: actor } = useAuth();
   const autorizado = puedeVer(actor);
 
+  const [logs, setLogs] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
   const [busqueda, setBusqueda] = useState("");
   const [filtroAccion, setFiltroAccion] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [seleccionado, setSeleccionado] = useState(null);
 
-  const sucursalActorId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
+  const cargarLogs = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(null);
+    try {
+      const data = await api.getAllPages("/auditoria-logs");
+      setLogs(data);
+    } catch (e) {
+      setErrorCarga(e instanceof ApiError ? e.message : "No se pudo cargar la auditoría.");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (autorizado) cargarLogs();
+  }, [autorizado, cargarLogs]);
 
   const visibles = useMemo(() => {
-    return auditoriaLogsSeed
-      .filter((l) => actorEsAdminGeneral(actor) || l.sucursal_id === sucursalActorId)
+    return logs
+      .filter((l) => actorEsAdminGeneral(actor) || l.sucursal?.nombre === actor.sucursal)
       .filter((l) => !filtroAccion || l.accion === filtroAccion)
-      .filter((l) => !busqueda.trim() || nombreUsuario(l.usuario_id).toLowerCase().includes(busqueda.toLowerCase()))
+      .filter((l) => !busqueda.trim() || (l.usuario?.nombre ?? "Sistema").toLowerCase().includes(busqueda.toLowerCase()))
       .filter((l) => !desde || l.created_at.slice(0, 10) >= desde)
       .filter((l) => !hasta || l.created_at.slice(0, 10) <= hasta)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [actor, sucursalActorId, filtroAccion, busqueda, desde, hasta]);
+  }, [logs, actor, filtroAccion, busqueda, desde, hasta]);
 
-  const accionesDisponibles = [...new Set(auditoriaLogsSeed.map((l) => l.accion))];
+  const accionesDisponibles = [...new Set(logs.map((l) => l.accion))];
 
   if (!autorizado) {
     return (
@@ -158,7 +172,24 @@ export default function AuditoriaView() {
             </tr>
           </thead>
           <tbody>
-            {visibles.length === 0 ? (
+            {cargando ? (
+              <tr className="empty-row">
+                <td colSpan={6}>
+                  <div className="u-loading-row">
+                    <Loader2 size={18} className="u-spin" /> Cargando auditoría...
+                  </div>
+                </td>
+              </tr>
+            ) : errorCarga ? (
+              <tr className="empty-row">
+                <td colSpan={6}>
+                  <div className="alert alert-danger u-max-480">
+                    <AlertTriangle size={16} className="u-icon-inline" />
+                    <span>{errorCarga}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : visibles.length === 0 ? (
               <tr className="empty-row">
                 <td colSpan={6}>No hay registros que coincidan con el filtro.</td>
               </tr>
@@ -166,7 +197,7 @@ export default function AuditoriaView() {
               visibles.map((l) => (
                 <tr key={l.id_auditoria}>
                   <td className="text-mono">{formatFecha(l.created_at)}</td>
-                  <td>{nombreUsuario(l.usuario_id)}</td>
+                  <td>{l.usuario?.nombre ?? "Sistema"}</td>
                   <td>
                     <div className="av-action-cell">
                       <ClipboardList size={13} className="av-action-icon" />
@@ -174,7 +205,7 @@ export default function AuditoriaView() {
                     </div>
                   </td>
                   <td>{l.tabla_afectada ?? "—"}</td>
-                  {actorEsAdminGeneral(actor) && <td>{l.sucursal_id ? nombreSucursal(l.sucursal_id) : "—"}</td>}
+                  {actorEsAdminGeneral(actor) && <td>{l.sucursal?.nombre ?? "—"}</td>}
                   <td>
                     <button className="btn btn-outline btn-sm" onClick={() => setSeleccionado(l)}>Ver</button>
                   </td>

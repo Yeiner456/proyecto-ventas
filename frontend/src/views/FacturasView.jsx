@@ -1,14 +1,7 @@
-import React, { useState, useMemo } from "react";
-import { FileText, Search, X, AlertTriangle, Download, Receipt } from "lucide-react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { FileText, Search, X, AlertTriangle, Download, Receipt, Loader2 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import {
-  facturas as facturasSeed,
-  ventaDe,
-  nombreMetodoPago,
-  nombreSucursal,
-  sucursales as sucursalesSeed,
-  usuarios as usuariosSeed,
-} from "../mocks/seedData";
+import { api, ApiError } from "../services/apiClient";
 import "../styles/FacturasView.css";
 
 /* ============================================================================
@@ -26,25 +19,29 @@ import "../styles/FacturasView.css";
  * siquiera acepta.
  *
  * FacturaPolicy: viewAny=true y view=scoped por sucursal para todos los
- * roles (por eso está en la Sidebar para admin_general, admin_sucursal,
- * cajero Y contador — es el único CRUD de "Ventas" al que el cajero
- * también tiene acceso además de Nueva venta/Registro de ventas).
+ * roles (por eso está en la Sidebar para admin_general, admin_sucursal y
+ * cajero — es el único listado de "Ventas" al que el cajero también
+ * tiene acceso además de Nueva venta/Registro de ventas).
  *
- * NOTA: el modelo Factura tiene un campo 'pdf_ruta', pero no until que
- * revisé encontré ningún endpoint que lo sirva o genere un PDF
- * descargable — ni en FacturaController ni en routes/api.php. El botón
- * "Descargar PDF" de abajo está deshabilitado a propósito con esa
- * explicación; lo dejo como pendiente a discutir con el equipo, no lo
- * invento en el frontend.
+ * NOTA: el modelo Factura tiene un campo 'pdf_ruta', pero no encontré
+ * ningún endpoint que lo sirva o genere un PDF descargable — ni en
+ * FacturaController ni en routes/api.php. El botón "Descargar PDF" de
+ * abajo está deshabilitado a propósito con esa explicación; lo dejo como
+ * pendiente a discutir con el equipo, no lo invento en el frontend.
+ *
+ * DETALLE DE LA FACTURA: FacturaController::show() NO carga
+ * venta.metodoPago (solo 'venta.detalles.producto', 'sucursal', 'cajero'),
+ * así que ese dato no estaría disponible ahí. En vez de mostrar un
+ * método de pago vacío o inventarlo, el modal de detalle pide
+ * GET /api/ventas/{venta_id} en su lugar — VentaController::show() SÍ
+ * carga sucursal, cajero, metodoPago, detalles.producto y factura en una
+ * sola llamada, así que cubre todo lo que necesita este modal sin tener
+ * que tocar el backend.
  * ==========================================================================*/
 
-function nombreCajero(id_usuario) {
-  return usuariosSeed.find((u) => u.id_usuario === id_usuario)?.nombre ?? "—";
-}
-
-function facturaVisible(actor, factura) {
+function facturaVisible(actor, factura, sucursales) {
   if (actorEsAdminGeneral(actor)) return true;
-  const sucursalActorId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
+  const sucursalActorId = sucursales.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
   return factura.sucursal_id === sucursalActorId;
 }
 
@@ -56,9 +53,27 @@ function formatMoney(n) {
   return `$${Number(n).toLocaleString("es-CO")}`;
 }
 
-
 function FacturaDetalleModal({ factura, onClose }) {
-  const venta = ventaDe(factura.venta_id);
+  const [venta, setVenta] = useState(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const data = await api.get(`/ventas/${factura.venta_id}`);
+        if (!cancelado) setVenta(data);
+      } catch (e) {
+        if (!cancelado) setError(e instanceof ApiError ? e.message : "No se pudo cargar el detalle de la venta.");
+      } finally {
+        if (!cancelado) setCargando(false);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [factura.venta_id]);
 
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
@@ -76,15 +91,15 @@ function FacturaDetalleModal({ factura, onClose }) {
         <div className="fv-detalle-grid">
           <div>
             <div className="field-help">Sucursal</div>
-            {nombreSucursal(factura.sucursal_id)}
+            {factura.sucursal?.nombre ?? "—"}
           </div>
           <div>
             <div className="field-help">Cajero</div>
-            {nombreCajero(factura.cajero_id)}
+            {factura.cajero?.nombre ?? "—"}
           </div>
           <div>
             <div className="field-help">Método de pago</div>
-            {venta ? nombreMetodoPago(venta.metodo_pago_id) : "—"}
+            {cargando ? "Cargando..." : venta?.metodo_pago?.nombre ?? "—"}
           </div>
           <div>
             <div className="field-help">Venta asociada</div>
@@ -92,14 +107,23 @@ function FacturaDetalleModal({ factura, onClose }) {
           </div>
         </div>
 
-        {venta ? (
+        {cargando ? (
+          <div className="u-loading-row">
+            <Loader2 size={18} className="u-spin" /> Cargando productos de la venta...
+          </div>
+        ) : error ? (
+          <div className="alert alert-warning">
+            <AlertTriangle size={16} className="u-icon-inline" />
+            <span>{error}</span>
+          </div>
+        ) : venta ? (
           <div>
             <div className="field-help fv-productos-label">
               Productos
             </div>
             {venta.detalles.map((d, i) => (
               <div className="fv-detalle-row" key={i}>
-                <span>{d.cantidad} × {d.nombre}</span>
+                <span>{d.cantidad} × {d.producto?.nombre ?? "Producto eliminado"}</span>
                 <span className="text-mono">{formatMoney(d.cantidad * d.precio_unitario_venta)}</span>
               </div>
             ))}
@@ -134,29 +158,54 @@ function FacturaDetalleModal({ factura, onClose }) {
 
 export default function FacturasView() {
   const { usuario: actor } = useAuth();
+  const [facturas, setFacturas] = useState([]);
+  const [sucursales, setSucursales] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
   const [busqueda, setBusqueda] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [seleccionada, setSeleccionada] = useState(null);
 
+  const cargarDatos = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(null);
+    try {
+      const [facturasData, sucursalesData] = await Promise.all([
+        api.getAllPages("/facturas"),
+        api.getAllPages("/sucursales"),
+      ]);
+      setFacturas(facturasData);
+      setSucursales(sucursalesData);
+    } catch (e) {
+      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar las facturas.");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    cargarDatos();
+  }, [cargarDatos]);
+
   const visibles = useMemo(() => {
-    return facturasSeed
-      .filter((f) => facturaVisible(actor, f))
+    return facturas
+      .filter((f) => facturaVisible(actor, f, sucursales))
       .filter((f) => !busqueda.trim() || f.numero_factura.toLowerCase().includes(busqueda.toLowerCase()))
       .filter((f) => !desde || f.created_at.slice(0, 10) >= desde)
       .filter((f) => !hasta || f.created_at.slice(0, 10) <= hasta)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [actor, busqueda, desde, hasta]);
+  }, [facturas, actor, sucursales, busqueda, desde, hasta]);
 
   const stats = useMemo(() => {
-    const base = facturasSeed.filter((f) => facturaVisible(actor, f));
+    const base = facturas.filter((f) => facturaVisible(actor, f, sucursales));
     const totalFacturado = base.reduce((sum, f) => sum + Number(f.total), 0);
     return {
       cantidad: base.length,
       totalFacturado,
       promedio: base.length ? totalFacturado / base.length : 0,
     };
-  }, [actor]);
+  }, [facturas, actor, sucursales]);
 
   return (
     <div>
@@ -215,7 +264,24 @@ export default function FacturasView() {
             </tr>
           </thead>
           <tbody>
-            {visibles.length === 0 ? (
+            {cargando ? (
+              <tr className="empty-row">
+                <td colSpan={6}>
+                  <div className="u-loading-row">
+                    <Loader2 size={18} className="u-spin" /> Cargando facturas...
+                  </div>
+                </td>
+              </tr>
+            ) : errorCarga ? (
+              <tr className="empty-row">
+                <td colSpan={6}>
+                  <div className="alert alert-danger u-max-480">
+                    <AlertTriangle size={16} className="u-icon-inline" />
+                    <span>{errorCarga}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : visibles.length === 0 ? (
               <tr className="empty-row">
                 <td colSpan={6}>No hay facturas que coincidan con el filtro.</td>
               </tr>
@@ -229,8 +295,8 @@ export default function FacturasView() {
                     </div>
                   </td>
                   <td className="text-mono">{formatFecha(f.created_at)}</td>
-                  {actorEsAdminGeneral(actor) && <td>{nombreSucursal(f.sucursal_id)}</td>}
-                  <td>{nombreCajero(f.cajero_id)}</td>
+                  {actorEsAdminGeneral(actor) && <td>{f.sucursal?.nombre ?? "—"}</td>}
+                  <td>{f.cajero?.nombre ?? "—"}</td>
                   <td className="text-mono">{formatMoney(f.total)}</td>
                   <td>
                     <button className="btn btn-outline btn-sm" onClick={() => setSeleccionada(f)}>

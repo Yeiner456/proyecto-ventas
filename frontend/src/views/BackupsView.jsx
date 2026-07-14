@@ -7,9 +7,12 @@ import "../styles/BackupsView.css";
 /* ============================================================================
  * BACKUPS — Generar, listar y descargar respaldos de la base de datos.
  * ----------------------------------------------------------------------------
- * Primera vista del frontend conectada 100% a la API real (las otras 13
- * todavía usan mocks/seedData.js) — no hay "modo demo" posible aquí, porque
- * un backup solo tiene sentido si es un dump real de la BD del backend.
+ * Primera vista del frontend conectada 100% a la API real — desde
+ * entonces, el resto del frontend también se migró por completo: ya no
+ * queda ninguna vista leyendo de mocks/seedData.js (el archivo fue
+ * eliminado). Este comentario se conserva como nota histórica de por
+ * qué esta vista nunca tuvo "modo demo": un backup solo tiene sentido
+ * si es un dump real de la BD del backend, nunca se pudo simular.
  *
  * Autorización: refleja el Gate 'gestionar-backups' del backend (solo
  * admin_general, por sucursal_id === null — nunca por nombre de rol).
