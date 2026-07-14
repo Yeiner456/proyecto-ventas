@@ -234,7 +234,7 @@ export default function SucursalesView() {
       const data = await api.getAllPages("/sucursales");
       setSucursales(data);
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar las sucursales.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudieron cargar las sucursales."));
     } finally {
       setCargando(false);
     }
@@ -271,7 +271,7 @@ export default function SucursalesView() {
       await cargarSucursales();
       setFormModal(null);
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : "No se pudo guardar la sucursal.");
+      showToast(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo guardar la sucursal."));
     } finally {
       setSaving(false);
     }

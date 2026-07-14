@@ -142,7 +142,7 @@ export default function NuevaVentaView() {
       setMetodosPago(metodosData);
       setMetodoPagoId((prev) => prev || metodosData.find((m) => m.es_default)?.id_metodo_pago || "");
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudo cargar el catálogo de productos.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo cargar el catálogo de productos."));
     } finally {
       setCargando(false);
     }

@@ -65,7 +65,7 @@ function FacturaDetalleModal({ factura, onClose }) {
         const data = await api.get(`/ventas/${factura.venta_id}`);
         if (!cancelado) setVenta(data);
       } catch (e) {
-        if (!cancelado) setError(e instanceof ApiError ? e.message : "No se pudo cargar el detalle de la venta.");
+        if (!cancelado) setError(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo cargar el detalle de la venta."));
       } finally {
         if (!cancelado) setCargando(false);
       }
@@ -178,7 +178,7 @@ export default function FacturasView() {
       setFacturas(facturasData);
       setSucursales(sucursalesData);
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar las facturas.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudieron cargar las facturas."));
     } finally {
       setCargando(false);
     }

@@ -357,7 +357,7 @@ export default function RolesView() {
       setRoles(rolesData);
       setUsuarios(usuariosData);
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar los roles.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudieron cargar los roles."));
     } finally {
       setCargando(false);
     }
@@ -405,7 +405,7 @@ export default function RolesView() {
       await cargarDatos();
       setFormModal(null);
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : "No se pudo guardar el rol.");
+      showToast(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo guardar el rol."));
     } finally {
       setSaving(false);
     }

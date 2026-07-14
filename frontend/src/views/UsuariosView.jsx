@@ -270,7 +270,7 @@ export default function UsuariosView() {
       setRoles(rolesData);
       setSucursales(sucursalesData);
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar los usuarios.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudieron cargar los usuarios."));
     } finally {
       setCargando(false);
     }
@@ -314,7 +314,7 @@ export default function UsuariosView() {
       await cargarDatos();
       setFormModal(null);
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : "No se pudo guardar el usuario.");
+      showToast(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo guardar el usuario."));
     } finally {
       setSaving(false);
     }

@@ -241,7 +241,7 @@ export default function VentasView() {
       setVentas(ventasData);
       setSucursales(sucursalesData);
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar las ventas.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudieron cargar las ventas."));
     } finally {
       setCargando(false);
     }
@@ -286,7 +286,7 @@ export default function VentasView() {
       showToast(`Venta #${venta.id_venta} → ${ESTADO_LABEL[siguiente]}`);
       await cargarDatos();
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : "No se pudo cambiar el estado de la venta.");
+      showToast(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo cambiar el estado de la venta."));
     } finally {
       setProcesando(false);
     }
@@ -300,7 +300,7 @@ export default function VentasView() {
       setCancelarVenta(null);
       await cargarDatos();
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : "No se pudo cancelar la venta.");
+      showToast(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo cancelar la venta."));
     } finally {
       setProcesando(false);
     }
@@ -314,7 +314,7 @@ export default function VentasView() {
       setEliminarVenta(null);
       await cargarDatos();
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : "No se pudo eliminar la venta.");
+      showToast(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo eliminar la venta."));
     } finally {
       setProcesando(false);
     }

@@ -97,7 +97,7 @@ export default function AuditoriaView() {
       const data = await api.getAllPages("/auditoria-logs");
       setLogs(data);
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudo cargar la auditoría.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo cargar la auditoría."));
     } finally {
       setCargando(false);
     }

@@ -88,7 +88,7 @@ export default function DashboardView() {
       setNotificaciones(notificacionesData);
       setSucursales(sucursalesData);
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudo cargar el panorama general.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo cargar el panorama general."));
     } finally {
       setCargando(false);
     }

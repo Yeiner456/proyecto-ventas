@@ -55,6 +55,11 @@ async function request(path, { method = "GET", body, auth = true } = {}) {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
+      // Sin esto, el navegador puede servir una respuesta cacheada (304)
+      // para un GET repetido con los mismos headers — nada raro en un
+      // cliente HTTP normal, pero rompe un CRUD que siempre necesita el
+      // dato más reciente (ej. después de crear/editar/eliminar algo).
+      cache: "no-store",
     });
   } catch (networkError) {
     // fetch() solo llega aquí si ni siquiera hubo respuesta HTTP: CORS,
@@ -108,7 +113,30 @@ export const api = {
   // debe fijar Content-Type a mano (el navegador pone el boundary del
   // multipart automáticamente) ni serializar el body con JSON.stringify.
   uploadFile: (path, formData) => requestFormData(path, formData),
+  // Trae TODAS las páginas de un endpoint paginado por Laravel (paginate()),
+  // que siempre responde { data: [...], meta: { last_page, ... } }. Las
+  // vistas de catálogo (roles, sucursales, categorías, métodos de pago...)
+  // necesitan el listado completo para selects/tablas simples, no una sola
+  // página de 15 — paginar de verdad solo tiene sentido en listados grandes
+  // como Ventas o Auditoría, que sí controlan su propia página desde la UI.
+  getAllPages: (path, perPage = 200) => obtenerTodasLasPaginas(path, perPage),
 };
+
+async function obtenerTodasLasPaginas(path, perPage) {
+  const separador = path.includes("?") ? "&" : "?";
+  const acumulado = [];
+  let pagina = 1;
+  let ultimaPagina = 1;
+
+  do {
+    const respuesta = await request(`${path}${separador}page=${pagina}&per_page=${perPage}`);
+    acumulado.push(...(respuesta.data ?? []));
+    ultimaPagina = respuesta.meta?.last_page ?? 1;
+    pagina++;
+  } while (pagina <= ultimaPagina);
+
+  return acumulado;
+}
 
 /**
  * Sube un FormData (multipart). Igual que requestBlob(), se mantiene
@@ -122,7 +150,7 @@ async function requestFormData(path, formData) {
 
   let response;
   try {
-    response = await fetch(`${BASE_URL}/api${path}`, { method: "POST", headers, body: formData });
+    response = await fetch(`${BASE_URL}/api${path}`, { method: "POST", headers, body: formData, cache: "no-store" });
   } catch (networkError) {
     throw new ApiError(
       `No se pudo conectar con el backend en ${BASE_URL}. Verifica que "php artisan serve" esté corriendo.`,
@@ -162,7 +190,7 @@ async function requestBlob(path) {
 
   let response;
   try {
-    response = await fetch(`${BASE_URL}/api${path}`, { method: "GET", headers });
+    response = await fetch(`${BASE_URL}/api${path}`, { method: "GET", headers, cache: "no-store" });
   } catch (networkError) {
     throw new ApiError(
       `No se pudo conectar con el backend en ${BASE_URL}. Verifica que "php artisan serve" esté corriendo.`,

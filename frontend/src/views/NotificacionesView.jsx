@@ -72,7 +72,7 @@ export default function NotificacionesView() {
       setNotificaciones(notificacionesData);
       setSucursales(sucursalesData);
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar las notificaciones.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudieron cargar las notificaciones."));
     } finally {
       setCargando(false);
     }

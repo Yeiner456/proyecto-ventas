@@ -79,7 +79,7 @@ export default function ReportesView() {
       })
       .catch((e) => {
         if (!activo) return;
-        setErrorSucursales(e instanceof ApiError ? e.message : "No se pudieron cargar las sucursales.");
+        setErrorSucursales(e instanceof ApiError ? e.message : (e?.message ?? "No se pudieron cargar las sucursales."));
       })
       .finally(() => activo && setCargandoSucursales(false));
     return () => {
@@ -131,7 +131,7 @@ export default function ReportesView() {
       } catch (e) {
         setErrorPorTipo((prev) => ({
           ...prev,
-          [tipo.id]: e instanceof ApiError ? e.message : "No se pudo generar el archivo.",
+          [tipo.id]: e instanceof ApiError ? e.message : (e?.message ?? "No se pudo generar el archivo."),
         }));
       } finally {
         setEstadoBoton((prev) => ({ ...prev, [clave]: false }));

@@ -6,9 +6,9 @@ import { useAuth } from "../context/AuthContext";
 /* ============================================================================
  * LOGIN — POST /api/login
  * ----------------------------------------------------------------------------
- * El backend pide id_usuario (el ID numérico, PK de la tabla), NO el
- * email — aunque UsuarioSeeder documenta las cuentas de prueba con su
- * email para que sea legible, LoginRequest solo acepta el número.
+ * El backend pide id_usuario (el ID numérico, PK de la tabla). La tabla
+ * usuarios no tiene columna de email (proyecto de uso local, sin
+ * necesidad de correo) — LoginRequest solo acepta el número de ID.
  *
  * Anti-enumeración (AuthController::login): la API devuelve el MISMO
  * mensaje genérico tanto si el id_usuario no existe como si la
@@ -113,10 +113,10 @@ export default function LoginView() {
         </form>
 
         <div className="login-help">
-          En desarrollo, <code>UsuarioSeeder</code> crea 4 cuentas con contraseña{" "}
-          <code>password123</code> (admin_general, admin_sucursal, y 2 cajeros). Usa el{" "}
-          <strong>ID numérico</strong> del usuario, no su email — revísalo con{" "}
-          <code>SELECT id_usuario, email FROM usuarios</code> si no lo recuerdas.
+          Inicia sesión con el <strong>ID numérico</strong> del usuario, no con un
+          nombre o correo. Si no lo recuerdas, consúltalo con{" "}
+          <code>SELECT id_usuario, nombre FROM usuarios</code> o pídelo a un
+          administrador.
         </div>
       </div>
     </div>

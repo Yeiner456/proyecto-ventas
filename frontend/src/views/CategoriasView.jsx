@@ -178,7 +178,7 @@ export default function CategoriasView() {
       setSucursales(sucursalesData);
       setProductos(productosData);
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar las categorías.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudieron cargar las categorías."));
     } finally {
       setCargando(false);
     }
@@ -213,7 +213,7 @@ export default function CategoriasView() {
       await cargarDatos();
       setFormModal(null);
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : "No se pudo guardar la categoría.");
+      showToast(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo guardar la categoría."));
     } finally {
       setSaving(false);
     }

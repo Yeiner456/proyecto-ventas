@@ -152,7 +152,7 @@ export default function MetodosPagoView() {
       const data = await api.get("/metodos-pago");
       setMetodos(data);
     } catch (e) {
-      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar los métodos de pago.");
+      setErrorCarga(e instanceof ApiError ? e.message : (e?.message ?? "No se pudieron cargar los métodos de pago."));
     } finally {
       setCargando(false);
     }
@@ -180,7 +180,7 @@ export default function MetodosPagoView() {
       await cargarMetodos();
       setFormModal(null);
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : "No se pudo guardar el método de pago.");
+      showToast(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo guardar el método de pago."));
     } finally {
       setSaving(false);
     }

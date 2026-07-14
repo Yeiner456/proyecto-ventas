@@ -127,7 +127,7 @@ export default function BackupsView() {
       const data = await api.get("/backups");
       setBackups(data);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "No se pudo cargar la lista de backups.");
+      setError(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo cargar la lista de backups."));
     } finally {
       setCargando(false);
     }
@@ -144,7 +144,7 @@ export default function BackupsView() {
       const blob = await api.download(`/backups/${filename}/descargar`);
       triggerBrowserDownload(blob, filename);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "No se pudo descargar el backup.");
+      setError(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo descargar el backup."));
     } finally {
       setDescargando(null);
     }
@@ -160,7 +160,7 @@ export default function BackupsView() {
       setMensaje(`Backup generado y descargado: ${nuevo.filename}`);
       await cargarBackups();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "No se pudo generar el backup.");
+      setError(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo generar el backup."));
     } finally {
       setGenerando(false);
     }
@@ -186,7 +186,7 @@ export default function BackupsView() {
       // El error se muestra DENTRO del modal (no se cierra), para que el
       // usuario pueda reintentar sin tener que volver a seleccionar el
       // archivo y volver a escribir "RESTAURAR".
-      setErrorRestaurar(e instanceof ApiError ? e.message : "No se pudo restaurar el backup.");
+      setErrorRestaurar(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo restaurar el backup."));
     } finally {
       setRestaurando(false);
     }
