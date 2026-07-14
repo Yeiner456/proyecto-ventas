@@ -29,6 +29,18 @@
 /* Etiqueta "PRODUCTOS" en mayúsculas dentro del detalle */
 .vv-productos-label { margin-bottom: 8px; text-transform: uppercase; letter-spacing: .03em; }
 
+.vv-comprobantes { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.vv-comprobante-item {
+  display: flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+  text-decoration: none; color: var(--text-primary);
+  font-family: 'Roboto', sans-serif; font-size: 12.5px;
+  transition: border-color .15s ease;
+}
+.vv-comprobante-item:hover { border-color: var(--sena-green, #39A900); }
+.vv-comprobante-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
+.vv-comprobante-file { display: flex; align-items: center; gap: 6px; }
+
 /* Celda de N° de venta en la tabla (ícono + texto mono) */
 .vv-numero-cell { display: flex; align-items: center; gap: 8px; }
 .vv-numero-icon { color: var(--sena-green-dark); }

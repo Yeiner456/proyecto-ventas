@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { FileText, Search, X, AlertTriangle, Download, Receipt, Loader2 } from "lucide-react";
+import { FileText, Search, X, AlertTriangle, Download, Receipt, Loader2, Paperclip, ExternalLink } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import { api, ApiError } from "../services/apiClient";
+import { api, ApiError, storageUrl } from "../services/apiClient";
 import { descargarFacturaPDF } from "../utils/exportar";
 import "../styles/FacturasView.css";
 
@@ -134,6 +134,36 @@ function FacturaDetalleModal({ factura, onClose }) {
               <span>Total</span>
               <span className="text-mono">{formatMoney(factura.total)}</span>
             </div>
+
+            <div className="field-help fv-productos-label">Comprobante de pago</div>
+            {(venta.comprobantes ?? []).length === 0 ? (
+              <p className="text-muted">
+                {venta.metodo_pago?.requiere_comp
+                  ? "Esta venta requería comprobante, pero no tiene ninguno adjunto."
+                  : "Este método de pago no requiere comprobante."}
+              </p>
+            ) : (
+              <div className="fv-comprobantes">
+                {venta.comprobantes.map((c) => (
+                  <a
+                    key={c.id_comprobante}
+                    href={storageUrl(c.archivo_ruta)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="fv-comprobante-item"
+                  >
+                    {["jpg", "jpeg", "png"].includes((c.tipo_archivo ?? "").toLowerCase()) ? (
+                      <img src={storageUrl(c.archivo_ruta)} alt="Comprobante de pago" className="fv-comprobante-thumb" />
+                    ) : (
+                      <span className="fv-comprobante-file">
+                        <Paperclip size={14} /> Comprobante.{c.tipo_archivo}
+                      </span>
+                    )}
+                    <ExternalLink size={12} />
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="alert alert-warning">

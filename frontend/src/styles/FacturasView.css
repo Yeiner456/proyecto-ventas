@@ -23,6 +23,18 @@
 /* Etiqueta "PRODUCTOS" en mayúsculas dentro del modal */
 .fv-productos-label { margin-bottom: 8px; text-transform: uppercase; letter-spacing: .03em; }
 
+.fv-comprobantes { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.fv-comprobante-item {
+  display: flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+  text-decoration: none; color: var(--text-primary);
+  font-family: 'Roboto', sans-serif; font-size: 12.5px;
+  transition: border-color .15s ease;
+}
+.fv-comprobante-item:hover { border-color: var(--sena-green, #39A900); }
+.fv-comprobante-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
+.fv-comprobante-file { display: flex; align-items: center; gap: 6px; }
+
 /* Celda de N° de factura en la tabla (ícono + texto mono) */
 .fv-numero-cell { display: flex; align-items: center; gap: 8px; }
 .fv-numero-icon { color: var(--sena-green-dark); }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight, Loader2 } from "lucide-react";
+import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight, Loader2, Paperclip, ExternalLink } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import { api, ApiError } from "../services/apiClient";
+import { api, ApiError, storageUrl } from "../services/apiClient";
 import "../styles/VentasView.css";
 
 /* ============================================================================
@@ -152,9 +152,35 @@ function ConfirmDeleteModal({ venta, onCancel, onConfirm, deleting }) {
   );
 }
 
-function DetalleModal({ venta, onClose }) {
+function DetalleModal({ venta: ventaInicial, onClose }) {
+  // La lista (GET /api/ventas) no trae 'comprobantes' — solo
+  // VentaController::show() lo carga. Se pide fresco al abrir el modal,
+  // igual que ya se hace en FacturasView para el método de pago.
+  const [venta, setVenta] = useState(ventaInicial);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const data = await api.get(`/ventas/${ventaInicial.id_venta}`);
+        if (!cancelado) setVenta(data);
+      } catch {
+        // si falla, se sigue mostrando lo que ya se tenía de la lista
+        // (todo excepto comprobantes, que en ese caso queda vacío).
+      } finally {
+        if (!cancelado) setCargando(false);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [ventaInicial.id_venta]);
+
   const pasos = ["pendiente", "en_preparacion", "listo_para_entregar", "pagado", "entregado"];
   const indiceActual = pasos.indexOf(venta.estado);
+  const comprobantes = venta.comprobantes ?? [];
+  const esImagen = (tipo) => ["jpg", "jpeg", "png"].includes((tipo ?? "").toLowerCase());
 
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
@@ -206,6 +232,40 @@ function DetalleModal({ venta, onClose }) {
           <span>Total</span>
           <span className="text-mono">{formatMoney(venta.total)}</span>
         </div>
+
+        <div className="field-help vv-productos-label">Comprobante de pago</div>
+        {cargando ? (
+          <div className="u-loading-row">
+            <Loader2 size={16} className="u-spin" /> Cargando...
+          </div>
+        ) : comprobantes.length === 0 ? (
+          <p className="text-muted">
+            {venta.metodo_pago?.requiere_comp
+              ? "Esta venta requería comprobante, pero no tiene ninguno adjunto."
+              : "Este método de pago no requiere comprobante."}
+          </p>
+        ) : (
+          <div className="vv-comprobantes">
+            {comprobantes.map((c) => (
+              <a
+                key={c.id_comprobante}
+                href={storageUrl(c.archivo_ruta)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="vv-comprobante-item"
+              >
+                {esImagen(c.tipo_archivo) ? (
+                  <img src={storageUrl(c.archivo_ruta)} alt="Comprobante de pago" className="vv-comprobante-thumb" />
+                ) : (
+                  <span className="vv-comprobante-file">
+                    <Paperclip size={14} /> Comprobante.{c.tipo_archivo}
+                  </span>
+                )}
+                <ExternalLink size={12} />
+              </a>
+            ))}
+          </div>
+        )}
 
         <div className="modal-actions">
           <button className="btn btn-primary" onClick={onClose}>Cerrar</button>
