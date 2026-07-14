@@ -1,14 +1,6 @@
-import React, { useState, useMemo } from "react";
-import { Search, Plus, Minus, Trash2, X, AlertTriangle, Info, Pencil, CheckCircle2 } from "lucide-react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { Search, Plus, Minus, Trash2, X, AlertTriangle, Info, Pencil, CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import {
-  sucursales as sucursalesSeed,
-  productos as productosSeed,
-  categoriasDeSucursal,
-  nombreCategoria,
-  inventario as inventarioSeed,
-  metodosPago as metodosPagoSeed,
-} from "../mocks/seedData";
 import { api, ApiError } from "../services/apiClient";
 import ComprobanteModal from "../components/ComprobanteModal";
 import "../styles/NuevaVentaView.css";
@@ -37,14 +29,14 @@ import "../styles/NuevaVentaView.css";
  * before(), pero no tiene sucursal propia — no tendría sentido que operara
  * una caja — por eso esta vista se bloquea para admin_general).
  *
- * LIMITACIÓN PENDIENTE (fuera del alcance de este cambio): el catálogo de
- * productos, categorías, inventario y métodos de pago que se muestran acá
- * siguen viniendo de mocks/seedData.js, no de GET /api/productos,
- * /api/inventario, /api/categorias-productos ni /api/metodos-pago. La
- * venta y el descuento de stock SÍ quedan bien registrados en la base de
- * datos real con este cambio; lo que puede quedar desactualizado es lo
- * que ve el cajero en pantalla (stock, catálogo) hasta que se conecte
- * también esa parte.
+ * CATÁLOGO: productos, categorías y métodos de pago ya vienen de la API
+ * real (GET /api/productos, /api/categorias-productos, /api/metodos-pago).
+ * Para cajero/admin_sucursal, /api/productos y /api/categorias-productos
+ * YA llegan filtrados por su propia sucursal (FiltraPorSucursal en el
+ * backend) — no hace falta filtrar por sucursal_id en el frontend como sí
+ * era necesario con el mock. El stock tampoco se pide aparte: cada
+ * producto ya trae su 'inventario' anidado (ProductoController::index
+ * hace ->with(['sucursal', 'categoria', 'inventario'])).
  * ==========================================================================*/
 
 function puedeVender(actor) {
@@ -113,35 +105,62 @@ function ConfirmacionModal({ factura, onCerrar }) {
 export default function NuevaVentaView() {
   const { usuario: actor } = useAuth();
   const autorizado = puedeVender(actor);
-  const sucursalId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
 
-  const [stockLocal, setStockLocal] = useState(() =>
-    Object.fromEntries(inventarioSeed.map((i) => [i.producto_id, i.cantidad]))
-  );
+  const [productos, setProductos] = useState([]);
+  const [categorias, setCategorias] = useState([]);
+  const [metodosPago, setMetodosPago] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
+
   const [cart, setCart] = useState([]); // { producto_id, nombre, precio_base, precio_unitario_venta, cantidad, ajuste_precio, observacion_ajuste }
   const [busqueda, setBusqueda] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState("todos");
-  const [metodoPagoId, setMetodoPagoId] = useState(metodosPagoSeed.find((m) => m.es_default)?.id_metodo_pago ?? "");
+  const [metodoPagoId, setMetodoPagoId] = useState("");
   const [observacion, setObservacion] = useState("");
   const [ajustando, setAjustando] = useState(null); // item del carrito que se está ajustando
   const [cobrando, setCobrando] = useState(false);
   const [error, setError] = useState(null);
   const [facturaGenerada, setFacturaGenerada] = useState(null);
 
-  // Estado del paso "comprobante de pago" (nuevo)
+  // Estado del paso "comprobante de pago"
   const [ventaPendiente, setVentaPendiente] = useState(null); // venta creada en POST, esperando comprobante
   const [mostrarComprobante, setMostrarComprobante] = useState(false);
   const [subiendoComprobante, setSubiendoComprobante] = useState(false);
   const [errorComprobante, setErrorComprobante] = useState(null);
 
-  const productosSucursal = useMemo(() => productosSeed.filter((p) => p.sucursal_id === sucursalId && p.activo), [sucursalId]);
-  const categorias = useMemo(() => categoriasDeSucursal(sucursalId), [sucursalId]);
+  const cargarCatalogo = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(null);
+    try {
+      const [productosData, categoriasData, metodosData] = await Promise.all([
+        api.getAllPages("/productos?solo_activos=true"),
+        api.getAllPages("/categorias-productos"),
+        api.get("/metodos-pago?solo_activos=true"),
+      ]);
+      setProductos(productosData);
+      setCategorias(categoriasData);
+      setMetodosPago(metodosData);
+      setMetodoPagoId((prev) => prev || metodosData.find((m) => m.es_default)?.id_metodo_pago || "");
+    } catch (e) {
+      setErrorCarga(e instanceof ApiError ? e.message : "No se pudo cargar el catálogo de productos.");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
 
+  useEffect(() => {
+    if (autorizado) cargarCatalogo();
+  }, [autorizado, cargarCatalogo]);
+
+  // 'productos' y 'categorias' ya llegan filtrados por la sucursal del
+  // actor (FiltraPorSucursal en el backend) cuando quien pregunta no es
+  // admin_general — y admin_general no puede llegar a esta vista
+  // (ver 'autorizado' más abajo), así que no se repite ese filtro aquí.
   const productosFiltrados = useMemo(() => {
-    return productosSucursal
+    return productos
       .filter((p) => categoriaActiva === "todos" || p.categoria_id === categoriaActiva)
       .filter((p) => !busqueda.trim() || p.nombre.toLowerCase().includes(busqueda.toLowerCase()));
-  }, [productosSucursal, categoriaActiva, busqueda]);
+  }, [productos, categoriaActiva, busqueda]);
 
   const subtotal = cart.reduce((sum, i) => sum + i.cantidad * i.precio_unitario_venta, 0);
   const ajusteTotal = cart.reduce((sum, i) => sum + (i.precio_base - i.precio_unitario_venta) * i.cantidad, 0);
@@ -150,7 +169,7 @@ export default function NuevaVentaView() {
   function stockDisponible(producto) {
     if (!producto.maneja_stock) return null;
     const enCarrito = cart.find((i) => i.producto_id === producto.id_producto)?.cantidad ?? 0;
-    return (stockLocal[producto.id_producto] ?? 0) - enCarrito;
+    return (producto.inventario?.cantidad ?? 0) - enCarrito;
   }
 
   function agregarAlCarrito(producto) {
@@ -185,11 +204,11 @@ export default function NuevaVentaView() {
       return prev
         .map((i) => {
           if (i.producto_id !== producto_id) return i;
-          const producto = productosSeed.find((p) => p.id_producto === producto_id);
+          const producto = productos.find((p) => p.id_producto === producto_id);
           const nuevaCantidad = i.cantidad + delta;
           if (nuevaCantidad <= 0) return null;
           if (producto?.maneja_stock) {
-            const stockTotal = stockLocal[producto_id] ?? 0;
+            const stockTotal = producto.inventario?.cantidad ?? 0;
             if (nuevaCantidad > stockTotal) return i; // no deja pasar del stock local
           }
           return { ...i, cantidad: nuevaCantidad };
@@ -320,7 +339,7 @@ export default function NuevaVentaView() {
     );
   }
 
-  const metodoSeleccionado = metodosPagoSeed.find((m) => m.id_metodo_pago === Number(metodoPagoId));
+  const metodoSeleccionado = metodosPago.find((m) => m.id_metodo_pago === Number(metodoPagoId));
 
   return (
     <div>
@@ -351,12 +370,22 @@ export default function NuevaVentaView() {
           </div>
 
           <div className="nv-grid">
-            {productosFiltrados.map((p) => {
+            {cargando ? (
+              <div className="u-loading-row">
+                <Loader2 size={18} className="u-spin" /> Cargando catálogo...
+              </div>
+            ) : errorCarga ? (
+              <div className="alert alert-danger u-max-480">
+                <AlertTriangle size={16} className="u-icon-inline" />
+                <span>{errorCarga}</span>
+              </div>
+            ) : (
+              productosFiltrados.map((p) => {
               const disponible = stockDisponible(p);
               const sinStock = p.maneja_stock && disponible <= 0;
               return (
                 <button key={p.id_producto} className="nv-card" disabled={sinStock} onClick={() => agregarAlCarrito(p)}>
-                  <span className="nv-card-cat">{nombreCategoria(p.categoria_id)}</span>
+                  <span className="nv-card-cat">{p.categoria?.nombre ?? "Sin categoría"}</span>
                   <span className="nv-card-name">{p.nombre}</span>
                   <span className="nv-card-price">{formatMoney(p.precio_base)}</span>
                   {p.maneja_stock && (
@@ -366,7 +395,8 @@ export default function NuevaVentaView() {
                   )}
                 </button>
               );
-            })}
+              })
+            )}
           </div>
         </div>
 
@@ -428,7 +458,7 @@ export default function NuevaVentaView() {
           </div>
 
           <div className="nv-metodos">
-            {metodosPagoSeed.filter((m) => m.activo).map((m) => (
+            {metodosPago.filter((m) => m.activo).map((m) => (
               <button
                 key={m.id_metodo_pago}
                 className={`nv-metodo-pill${Number(metodoPagoId) === m.id_metodo_pago ? " active" : ""}`}

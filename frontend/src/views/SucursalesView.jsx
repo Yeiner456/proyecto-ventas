@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Building2,
   Plus,
@@ -11,9 +11,10 @@ import {
   Phone,
   Mail,
   MapPin,
+  Loader2,
 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import { sucursales as sucursalesSeed, usuarios as usuariosSeed } from "../mocks/seedData";
+import { api, ApiError } from "../services/apiClient";
 import "../styles/SucursalesView.css";
 
 /* ============================================================================
@@ -35,35 +36,6 @@ import "../styles/SucursalesView.css";
  * realmente permite. La Sidebar ya la oculta para no-admin_general, pero
  * si alguien llega por URL directa, ve la lista sin poder mutarla.
  * ==========================================================================*/
-
-const wait = (ms = 400) => new Promise((res) => setTimeout(res, ms));
-
-const api = {
-  async listar() {
-    await wait();
-    return sucursalesSeed;
-  },
-  async crear(payload) {
-    await wait();
-    return { id_sucursal: Date.now(), activa: true, ...payload };
-  },
-  async editar(id_sucursal, payload) {
-    await wait();
-    return { id_sucursal, ...payload };
-  },
-  async eliminar(id_sucursal) {
-    await wait(250);
-    const tieneDatos = usuariosSeed.some((u) => u.sucursal_id === id_sucursal);
-    if (tieneDatos) {
-      const error = new Error(
-        "No se puede eliminar la sucursal porque tiene datos asociados (usuarios, productos o ventas)."
-      );
-      error.status = 409;
-      throw error;
-    }
-    return true;
-  },
-};
 
 
 function SucursalCard({ sucursal, puedeEditar, onEdit, onDelete }) {
@@ -245,13 +217,32 @@ export default function SucursalesView() {
   const { usuario: actor } = useAuth();
   const puedeEditar = actorEsAdminGeneral(actor);
 
-  const [sucursales, setSucursales] = useState(sucursalesSeed);
+  const [sucursales, setSucursales] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
   const [formModal, setFormModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState(null);
+
+  const cargarSucursales = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(null);
+    try {
+      const data = await api.getAllPages("/sucursales");
+      setSucursales(data);
+    } catch (e) {
+      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar las sucursales.");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    cargarSucursales();
+  }, [cargarSucursales]);
 
   const stats = useMemo(
     () => ({
@@ -271,17 +262,16 @@ export default function SucursalesView() {
     setSaving(true);
     try {
       if (formModal.mode === "edit") {
-        const actualizada = await api.editar(formModal.sucursal.id_sucursal, payload);
-        setSucursales((prev) =>
-          prev.map((s) => (s.id_sucursal === actualizada.id_sucursal ? { ...s, ...actualizada } : s))
-        );
+        await api.put(`/sucursales/${formModal.sucursal.id_sucursal}`, payload);
         showToast("Sucursal actualizada correctamente.");
       } else {
-        const creada = await api.crear(payload);
-        setSucursales((prev) => [...prev, creada]);
+        await api.post("/sucursales", payload);
         showToast("Sucursal creada correctamente.");
       }
+      await cargarSucursales();
       setFormModal(null);
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : "No se pudo guardar la sucursal.");
     } finally {
       setSaving(false);
     }
@@ -291,12 +281,12 @@ export default function SucursalesView() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      await api.eliminar(deleteTarget.id_sucursal);
-      setSucursales((prev) => prev.filter((s) => s.id_sucursal !== deleteTarget.id_sucursal));
+      await api.delete(`/sucursales/${deleteTarget.id_sucursal}`);
       setDeleteTarget(null);
       showToast("Sucursal eliminada.");
+      await cargarSucursales();
     } catch (err) {
-      setDeleteError(err.message);
+      setDeleteError(err instanceof ApiError ? err.message : "No se pudo eliminar la sucursal.");
     } finally {
       setDeleting(false);
     }
@@ -337,18 +327,31 @@ export default function SucursalesView() {
       </div>
 
       <div className="sv-grid">
-        {sucursales.map((s) => (
-          <SucursalCard
-            key={s.id_sucursal}
-            sucursal={s}
-            puedeEditar={puedeEditar}
-            onEdit={(s) => setFormModal({ mode: "edit", sucursal: s })}
-            onDelete={(s) => {
-              setDeleteTarget(s);
-              setDeleteError(null);
-            }}
-          />
-        ))}
+        {cargando ? (
+          <div className="u-loading-row">
+            <Loader2 size={18} className="u-spin" /> Cargando sucursales...
+          </div>
+        ) : errorCarga ? (
+          <div className="alert alert-danger u-max-480">
+            <AlertTriangle size={16} className="u-icon-inline" />
+            <span>{errorCarga}</span>
+          </div>
+        ) : sucursales.length === 0 ? (
+          <p className="sv-subtitle">No hay sucursales registradas todavía.</p>
+        ) : (
+          sucursales.map((s) => (
+            <SucursalCard
+              key={s.id_sucursal}
+              sucursal={s}
+              puedeEditar={puedeEditar}
+              onEdit={(s) => setFormModal({ mode: "edit", sucursal: s })}
+              onDelete={(s) => {
+                setDeleteTarget(s);
+                setDeleteError(null);
+              }}
+            />
+          ))
+        )}
       </div>
 
       {formModal && (

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Shield,
   Users,
@@ -10,12 +10,9 @@ import {
   Eye,
   AlertTriangle,
   Info,
+  Loader2,
 } from "lucide-react";
-import {
-  roles as rolesSeed,
-  usuarios as usuariosSeed,
-  nombreSucursal,
-} from "../mocks/seedData";
+import { api, ApiError } from "../services/apiClient";
 import "../styles/RolesView.css";
 
 /* ============================================================================
@@ -30,6 +27,11 @@ import "../styles/RolesView.css";
  * admin_general (ver RolPolicy::before). El resto de roles solo puede
  * listar/ver (viewAny/view -> admin_sucursal).
  *
+ * La tabla "Usuarios y sus roles" reutiliza GET /api/usuarios, que ya viene
+ * con las relaciones sucursal/rol cargadas (UsuarioController::index hace
+ * ->with(['sucursal', 'rol'])), así que no hace falta resolver nombres a
+ * mano como sí era necesario con los datos planos del mock.
+ *
  * NOTA DE ARQUITECTURA:
  * El modelo Rol NO tiene columna de permisos. Los "permisos principales"
  * que se muestran aquí son de SOLO LECTURA y vienen de un mapa estático
@@ -38,19 +40,6 @@ import "../styles/RolesView.css";
  * no está en ese mapa, el formulario avisa que no tendrá permisos reales
  * hasta que se actualicen las Policies en el backend.
  * ==========================================================================*/
-
-// --- Capa de datos (mock, con la misma forma que la API real) --------------
-// Sustituir el cuerpo de estas funciones por fetch() reales cuando el
-// frontend se conecte al backend. Las firmas ya están pensadas para eso.
-
-// Fuente: src/mocks/seedData.js (única fuente de verdad, compartida con
-// AuthContext y UsuariosView). Aquí solo se adapta la forma: esta vista
-// pinta el nombre de la sucursal, no su id.
-const initialRoles = rolesSeed;
-const initialUsuarios = usuariosSeed.map((u) => ({
-  ...u,
-  sucursal: nombreSucursal(u.sucursal_id) ?? "—",
-}));
 
 // Solo lectura: refleja lo que las Policies ya deciden por nombre de rol.
 const PERMISOS_POR_ROL = {
@@ -74,36 +63,6 @@ const PERMISOS_POR_ROL = {
 function permisosDe(nombreRol) {
   return PERMISOS_POR_ROL[nombreRol] ?? [];
 }
-
-// Simula latencia de red para que el prototipo se sienta como una llamada real.
-const wait = (ms = 400) => new Promise((res) => setTimeout(res, ms));
-
-const api = {
-  async listar() {
-    await wait();
-    return initialRoles;
-  },
-  async crear(payload) {
-    await wait();
-    return { id_rol: Date.now(), activo: true, ...payload };
-  },
-  async editar(id_rol, payload) {
-    await wait();
-    return { id_rol, ...payload };
-  },
-  async eliminar(id_rol, roles, usuarios) {
-    await wait(250);
-    const tieneUsuarios = usuarios.some((u) => u.rol_id === id_rol);
-    if (tieneUsuarios) {
-      const error = new Error(
-        "No se puede eliminar el rol porque tiene usuarios asignados."
-      );
-      error.status = 409;
-      throw error;
-    }
-    return true;
-  },
-};
 
 
 function Badge({ children, tone = "neutral" }) {
@@ -360,7 +319,7 @@ function UsersByRoleModal({ role, usuarios, onClose }) {
             <div className="rv-user-mini" key={u.id_usuario}>
               <div>
                 <div className="rv-user-mini-name">{u.nombre}</div>
-                <div className="rv-user-mini-sub">{u.sucursal}</div>
+                <div className="rv-user-mini-sub">{u.sucursal?.nombre ?? "—"}</div>
               </div>
               <Badge tone={u.activo ? "success" : "neutral"}>
                 {u.activo ? "Activo" : "Inactivo"}
@@ -374,8 +333,10 @@ function UsersByRoleModal({ role, usuarios, onClose }) {
 }
 
 export default function RolesView() {
-  const [roles, setRoles] = useState(initialRoles);
-  const [usuarios] = useState(initialUsuarios);
+  const [roles, setRoles] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
 
   const [formModal, setFormModal] = useState(null); // null | { mode: 'create' } | { mode:'edit', role }
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -384,6 +345,27 @@ export default function RolesView() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState(null);
+
+  const cargarDatos = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(null);
+    try {
+      const [rolesData, usuariosData] = await Promise.all([
+        api.getAllPages("/roles"),
+        api.getAllPages("/usuarios"),
+      ]);
+      setRoles(rolesData);
+      setUsuarios(usuariosData);
+    } catch (e) {
+      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar los roles.");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    cargarDatos();
+  }, [cargarDatos]);
 
   const usuariosPorRol = useMemo(() => {
     const map = {};
@@ -414,17 +396,16 @@ export default function RolesView() {
     setSaving(true);
     try {
       if (formModal.mode === "edit") {
-        const actualizado = await api.editar(formModal.role.id_rol, payload);
-        setRoles((prev) =>
-          prev.map((r) => (r.id_rol === actualizado.id_rol ? { ...r, ...actualizado } : r))
-        );
+        await api.put(`/roles/${formModal.role.id_rol}`, payload);
         showToast("Rol actualizado correctamente.");
       } else {
-        const creado = await api.crear(payload);
-        setRoles((prev) => [...prev, creado]);
+        await api.post("/roles", payload);
         showToast("Rol creado correctamente.");
       }
+      await cargarDatos();
       setFormModal(null);
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : "No se pudo guardar el rol.");
     } finally {
       setSaving(false);
     }
@@ -434,12 +415,12 @@ export default function RolesView() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      await api.eliminar(deleteTarget.id_rol, roles, usuarios);
-      setRoles((prev) => prev.filter((r) => r.id_rol !== deleteTarget.id_rol));
+      await api.delete(`/roles/${deleteTarget.id_rol}`);
       setDeleteTarget(null);
       showToast("Rol eliminado.");
+      await cargarDatos();
     } catch (err) {
-      setDeleteError(err.message);
+      setDeleteError(err instanceof ApiError ? err.message : "No se pudo eliminar el rol.");
     } finally {
       setDeleting(false);
     }
@@ -482,19 +463,30 @@ export default function RolesView() {
       </div>
 
       <div className="rv-role-grid">
-        {roles.map((role) => (
-          <RoleCard
-            key={role.id_rol}
-            role={role}
-            usuariosDelRol={usuariosPorRol[role.id_rol] ?? []}
-            onEdit={(r) => setFormModal({ mode: "edit", role: r })}
-            onDelete={(r) => {
-              setDeleteTarget(r);
-              setDeleteError(null);
-            }}
-            onVerUsuarios={(r) => setUsersModalRole(r)}
-          />
-        ))}
+        {cargando ? (
+          <div className="u-loading-row">
+            <Loader2 size={18} className="u-spin" /> Cargando roles...
+          </div>
+        ) : errorCarga ? (
+          <div className="rv-alert rv-alert-danger">
+            <AlertTriangle size={16} className="u-icon-inline" />
+            <span>{errorCarga}</span>
+          </div>
+        ) : (
+          roles.map((role) => (
+            <RoleCard
+              key={role.id_rol}
+              role={role}
+              usuariosDelRol={usuariosPorRol[role.id_rol] ?? []}
+              onEdit={(r) => setFormModal({ mode: "edit", role: r })}
+              onDelete={(r) => {
+                setDeleteTarget(r);
+                setDeleteError(null);
+              }}
+              onVerUsuarios={(r) => setUsersModalRole(r)}
+            />
+          ))
+        )}
       </div>
 
       <div>
@@ -519,25 +511,22 @@ export default function RolesView() {
                   <td colSpan={4}>No hay usuarios registrados.</td>
                 </tr>
               ) : (
-                usuarios.map((u) => {
-                  const rol = roles.find((r) => r.id_rol === u.rol_id);
-                  return (
-                    <tr key={u.id_usuario}>
-                      <td>{u.nombre}</td>
-                      <td>
-                        <Badge tone={rol ? "success" : "neutral"}>
-                          {rol ? rol.nombre : "Sin rol"}
-                        </Badge>
-                      </td>
-                      <td>{u.sucursal}</td>
-                      <td>
-                        <Badge tone={u.activo ? "success" : "neutral"}>
-                          {u.activo ? "Activo" : "Inactivo"}
-                        </Badge>
-                      </td>
-                    </tr>
-                  );
-                })
+                usuarios.map((u) => (
+                  <tr key={u.id_usuario}>
+                    <td>{u.nombre}</td>
+                    <td>
+                      <Badge tone={u.rol ? "success" : "neutral"}>
+                        {u.rol ? u.rol.nombre : "Sin rol"}
+                      </Badge>
+                    </td>
+                    <td>{u.sucursal?.nombre ?? "—"}</td>
+                    <td>
+                      <Badge tone={u.activo ? "success" : "neutral"}>
+                        {u.activo ? "Activo" : "Inactivo"}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>

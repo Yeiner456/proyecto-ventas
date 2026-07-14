@@ -1,13 +1,7 @@
-import React, { useState, useMemo } from "react";
-import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight } from "lucide-react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight, Loader2 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import {
-  sucursales as sucursalesSeed,
-  ventas as ventasSeed,
-  usuarios as usuariosSeed,
-  nombreSucursal,
-  nombreMetodoPago,
-} from "../mocks/seedData";
+import { api, ApiError } from "../services/apiClient";
 import "../styles/VentasView.css";
 
 /* ============================================================================
@@ -39,6 +33,13 @@ import "../styles/VentasView.css";
  *   - delete: SOLO admin_sucursal (no cajero) de su sucursal. Además el
  *     controlador exige estado en ['pendiente','cancelado'] sin importar
  *     el rol — lo replico literal, incluso para admin_general.
+ *
+ * GET /api/ventas ya viene con TODO anidado (VentaController::index hace
+ * ->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto'])), así
+ * que no hace falta pedir /api/usuarios ni /api/metodos-pago aparte para
+ * mostrar nombres. OJO con el nombre de la clave: Eloquent serializa las
+ * relaciones camelCase en snake_case — la relación metodoPago() llega
+ * como venta.metodo_pago, NO venta.metodoPago.
  * ==========================================================================*/
 
 const ESTADO_SIGUIENTE = {
@@ -66,30 +67,24 @@ const ESTADO_BADGE = {
   cancelado: "badge-danger",
 };
 
-const wait = (ms = 350) => new Promise((res) => setTimeout(res, ms));
-
-function nombreCajero(id_usuario) {
-  return usuariosSeed.find((u) => u.id_usuario === id_usuario)?.nombre ?? "—";
-}
-
-function ventaVisible(actor, venta) {
+function ventaVisible(actor, venta, sucursales) {
   if (actorEsAdminGeneral(actor)) return true;
-  const sucursalActorId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
+  const sucursalActorId = sucursales.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
   return venta.sucursal_id === sucursalActorId;
 }
 
-function puedeCambiarEstado(actor, venta) {
+function puedeCambiarEstado(actor, venta, sucursales) {
   if (venta.estado === "cancelado") return false;
   if (actorEsAdminGeneral(actor)) return true;
   if (actor.rol !== "admin_sucursal" && actor.rol !== "cajero") return false;
-  return ventaVisible(actor, venta);
+  return ventaVisible(actor, venta, sucursales);
 }
 
-function puedeEliminar(actor, venta) {
+function puedeEliminar(actor, venta, sucursales) {
   // Regla del controlador, aplica a TODOS los roles (incluido admin_general):
   if (!["pendiente", "cancelado"].includes(venta.estado)) return false;
   if (actorEsAdminGeneral(actor)) return true;
-  return actor.rol === "admin_sucursal" && ventaVisible(actor, venta);
+  return actor.rol === "admin_sucursal" && ventaVisible(actor, venta, sucursales);
 }
 
 function formatFecha(iso) {
@@ -187,10 +182,10 @@ function DetalleModal({ venta, onClose }) {
         )}
 
         <div className="vv-detalle-grid">
-          <div><div className="field-help">Sucursal</div>{nombreSucursal(venta.sucursal_id)}</div>
-          <div><div className="field-help">Cajero</div>{nombreCajero(venta.cajero_id)}</div>
+          <div><div className="field-help">Sucursal</div>{venta.sucursal?.nombre ?? "—"}</div>
+          <div><div className="field-help">Cajero</div>{venta.cajero?.nombre ?? "—"}</div>
           <div><div className="field-help">Fecha</div>{formatFecha(venta.created_at)}</div>
-          <div><div className="field-help">Método de pago</div>{venta.metodo_pago_id ? nombreMetodoPago(venta.metodo_pago_id) : "Sin definir"}</div>
+          <div><div className="field-help">Método de pago</div>{venta.metodo_pago?.nombre ?? "Sin definir"}</div>
         </div>
 
         {venta.observacion && (
@@ -203,7 +198,7 @@ function DetalleModal({ venta, onClose }) {
         <div className="field-help vv-productos-label">Productos</div>
         {venta.detalles.map((d, i) => (
           <div className="vv-detalle-row" key={i}>
-            <span>{d.cantidad} × {d.nombre}</span>
+            <span>{d.cantidad} × {d.producto?.nombre ?? "Producto eliminado"}</span>
             <span className="text-mono">{formatMoney(d.cantidad * d.precio_unitario_venta)}</span>
           </div>
         ))}
@@ -222,7 +217,10 @@ function DetalleModal({ venta, onClose }) {
 
 export default function VentasView() {
   const { usuario: actor } = useAuth();
-  const [ventas, setVentas] = useState(ventasSeed);
+  const [ventas, setVentas] = useState([]);
+  const [sucursales, setSucursales] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
   const [filtroEstado, setFiltroEstado] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -232,24 +230,45 @@ export default function VentasView() {
   const [procesando, setProcesando] = useState(false);
   const [toast, setToast] = useState(null);
 
+  const cargarDatos = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(null);
+    try {
+      const [ventasData, sucursalesData] = await Promise.all([
+        api.getAllPages("/ventas"),
+        api.getAllPages("/sucursales"),
+      ]);
+      setVentas(ventasData);
+      setSucursales(sucursalesData);
+    } catch (e) {
+      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar las ventas.");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    cargarDatos();
+  }, [cargarDatos]);
+
   const visibles = useMemo(() => {
     return ventas
-      .filter((v) => ventaVisible(actor, v))
+      .filter((v) => ventaVisible(actor, v, sucursales))
       .filter((v) => !filtroEstado || v.estado === filtroEstado)
       .filter((v) => !desde || v.created_at.slice(0, 10) >= desde)
       .filter((v) => !hasta || v.created_at.slice(0, 10) <= hasta)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [ventas, actor, filtroEstado, desde, hasta]);
+  }, [ventas, actor, sucursales, filtroEstado, desde, hasta]);
 
   const stats = useMemo(() => {
-    const base = ventas.filter((v) => ventaVisible(actor, v));
+    const base = ventas.filter((v) => ventaVisible(actor, v, sucursales));
     const facturables = base.filter((v) => ["pagado", "entregado"].includes(v.estado));
     return {
       total: base.length,
       pendientes: base.filter((v) => !["pagado", "entregado", "cancelado"].includes(v.estado)).length,
       vendido: facturables.reduce((sum, v) => sum + Number(v.total), 0),
     };
-  }, [ventas, actor]);
+  }, [ventas, actor, sucursales]);
 
   function showToast(msg) {
     setToast(msg);
@@ -261,11 +280,13 @@ export default function VentasView() {
     if (!siguiente) return;
     setProcesando(true);
     try {
-      await wait();
       // El backend descuenta inventario/factura solo al llegar a 'pagado'
       // (ver NuevaVentaView) — aquí solo reflejamos el cambio de estado.
-      setVentas((prev) => prev.map((v) => (v.id_venta === venta.id_venta ? { ...v, estado: siguiente } : v)));
+      await api.patch(`/ventas/${venta.id_venta}/estado`, { estado: siguiente });
       showToast(`Venta #${venta.id_venta} → ${ESTADO_LABEL[siguiente]}`);
+      await cargarDatos();
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : "No se pudo cambiar el estado de la venta.");
     } finally {
       setProcesando(false);
     }
@@ -274,12 +295,12 @@ export default function VentasView() {
   async function confirmarCancelacion(motivo) {
     setProcesando(true);
     try {
-      await wait();
-      setVentas((prev) =>
-        prev.map((v) => (v.id_venta === cancelarVenta.id_venta ? { ...v, estado: "cancelado", observacion: motivo ?? v.observacion } : v))
-      );
+      await api.patch(`/ventas/${cancelarVenta.id_venta}/estado`, { estado: "cancelado", motivo });
       showToast(`Venta #${cancelarVenta.id_venta} cancelada.`);
       setCancelarVenta(null);
+      await cargarDatos();
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : "No se pudo cancelar la venta.");
     } finally {
       setProcesando(false);
     }
@@ -288,10 +309,12 @@ export default function VentasView() {
   async function confirmarEliminacion() {
     setProcesando(true);
     try {
-      await wait();
-      setVentas((prev) => prev.filter((v) => v.id_venta !== eliminarVenta.id_venta));
+      await api.delete(`/ventas/${eliminarVenta.id_venta}`);
       showToast(`Venta #${eliminarVenta.id_venta} eliminada.`);
       setEliminarVenta(null);
+      await cargarDatos();
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : "No se pudo eliminar la venta.");
     } finally {
       setProcesando(false);
     }
@@ -350,7 +373,24 @@ export default function VentasView() {
             </tr>
           </thead>
           <tbody>
-            {visibles.length === 0 ? (
+            {cargando ? (
+              <tr className="empty-row">
+                <td colSpan={7}>
+                  <div className="u-loading-row">
+                    <Loader2 size={18} className="u-spin" /> Cargando ventas...
+                  </div>
+                </td>
+              </tr>
+            ) : errorCarga ? (
+              <tr className="empty-row">
+                <td colSpan={7}>
+                  <div className="alert alert-danger u-max-480">
+                    <AlertTriangle size={16} className="u-icon-inline" />
+                    <span>{errorCarga}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : visibles.length === 0 ? (
               <tr className="empty-row">
                 <td colSpan={7}>No hay ventas que coincidan con el filtro.</td>
               </tr>
@@ -364,8 +404,8 @@ export default function VentasView() {
                     </div>
                   </td>
                   <td className="text-mono">{formatFecha(v.created_at)}</td>
-                  {actorEsAdminGeneral(actor) && <td>{nombreSucursal(v.sucursal_id)}</td>}
-                  <td>{nombreCajero(v.cajero_id)}</td>
+                  {actorEsAdminGeneral(actor) && <td>{v.sucursal?.nombre ?? "—"}</td>}
+                  <td>{v.cajero?.nombre ?? "—"}</td>
                   <td>
                     <span className={`badge ${ESTADO_BADGE[v.estado]}`}>{ESTADO_LABEL[v.estado]}</span>
                   </td>
@@ -375,17 +415,17 @@ export default function VentasView() {
                       <button className="btn btn-outline btn-sm" onClick={() => setDetalleVenta(v)}>
                         Ver
                       </button>
-                      {ESTADO_SIGUIENTE[v.estado] && puedeCambiarEstado(actor, v) && (
+                      {ESTADO_SIGUIENTE[v.estado] && puedeCambiarEstado(actor, v, sucursales) && (
                         <button className="btn btn-outline btn-sm" title={`Avanzar a ${ESTADO_LABEL[ESTADO_SIGUIENTE[v.estado]]}`} onClick={() => avanzarEstado(v)} disabled={procesando}>
                           <ArrowRight size={13} />
                         </button>
                       )}
-                      {v.estado !== "cancelado" && puedeCambiarEstado(actor, v) && (
+                      {v.estado !== "cancelado" && puedeCambiarEstado(actor, v, sucursales) && (
                         <button className="btn btn-danger-ghost btn-sm" title="Cancelar venta" onClick={() => setCancelarVenta(v)}>
                           <Ban size={13} />
                         </button>
                       )}
-                      {puedeEliminar(actor, v) && (
+                      {puedeEliminar(actor, v, sucursales) && (
                         <button className="btn btn-danger-ghost btn-sm" title="Eliminar" onClick={() => setEliminarVenta(v)}>
                           <Trash2 size={13} />
                         </button>

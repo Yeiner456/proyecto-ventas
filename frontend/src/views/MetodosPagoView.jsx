@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { CreditCard, Plus, Pencil, Trash2, X, AlertTriangle, Info, Lock, Star } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { CreditCard, Plus, Pencil, Trash2, X, AlertTriangle, Info, Lock, Star, Loader2 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import { metodosPago as metodosPagoSeed, ventas as ventasSeed } from "../mocks/seedData";
+import { api, ApiError } from "../services/apiClient";
 import "../styles/MetodosPagoView.css";
 
 /* ============================================================================
@@ -14,33 +14,15 @@ import "../styles/MetodosPagoView.css";
  *
  * Regla de negocio replicada del controlador: es_default es EXCLUSIVO.
  * Marcar uno como predeterminado desmarca automáticamente los demás
- * (MetodoPagoController::store()/update()).
+ * (MetodoPagoController::store()/update()) — el backend ya lo hace, por
+ * eso tras guardar simplemente se recarga la lista completa en vez de
+ * intentar replicar ese desmarcado a mano en el frontend.
+ *
+ * OJO: MetodoPagoController::index() usa ->get(), NO ->paginate() (a
+ * diferencia de casi todos los demás listados) — la respuesta es un
+ * array plano, no { data, meta }. Por eso aquí se usa api.get() directo
+ * y NO api.getAllPages().
  * ==========================================================================*/
-
-const wait = (ms = 350) => new Promise((res) => setTimeout(res, ms));
-
-const api = {
-  async crear(payload) {
-    await wait();
-    return { id_metodo_pago: Date.now(), activo: true, ...payload };
-  },
-  async editar(id_metodo_pago, payload) {
-    await wait();
-    return { id_metodo_pago, ...payload };
-  },
-  async eliminar(id_metodo_pago) {
-    await wait(250);
-    const tieneVentas = ventasSeed.some((v) => v.metodo_pago_id === id_metodo_pago);
-    if (tieneVentas) {
-      const error = new Error(
-        "No se puede eliminar el método de pago porque tiene ventas asociadas. Desactívalo en su lugar."
-      );
-      error.status = 409;
-      throw error;
-    }
-    return true;
-  },
-};
 
 function FormModal({ initial, onCancel, onSubmit, saving, existentes }) {
   const isEdit = Boolean(initial);
@@ -153,13 +135,32 @@ export default function MetodosPagoView() {
   const { usuario: actor } = useAuth();
   const puedeEditar = actorEsAdminGeneral(actor);
 
-  const [metodos, setMetodos] = useState(metodosPagoSeed);
+  const [metodos, setMetodos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
   const [formModal, setFormModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState(null);
+
+  const cargarMetodos = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(null);
+    try {
+      const data = await api.get("/metodos-pago");
+      setMetodos(data);
+    } catch (e) {
+      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar los métodos de pago.");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    cargarMetodos();
+  }, [cargarMetodos]);
 
   function showToast(msg) {
     setToast(msg);
@@ -170,21 +171,16 @@ export default function MetodosPagoView() {
     setSaving(true);
     try {
       if (formModal.mode === "edit") {
-        const actualizado = await api.editar(formModal.metodo.id_metodo_pago, payload);
-        setMetodos((prev) => {
-          const base = payload.es_default ? prev.map((m) => ({ ...m, es_default: false })) : prev;
-          return base.map((m) => (m.id_metodo_pago === actualizado.id_metodo_pago ? { ...m, ...actualizado } : m));
-        });
+        await api.put(`/metodos-pago/${formModal.metodo.id_metodo_pago}`, payload);
         showToast("Método de pago actualizado.");
       } else {
-        const creado = await api.crear(payload);
-        setMetodos((prev) => {
-          const base = payload.es_default ? prev.map((m) => ({ ...m, es_default: false })) : prev;
-          return [...base, creado];
-        });
+        await api.post("/metodos-pago", payload);
         showToast("Método de pago creado.");
       }
+      await cargarMetodos();
       setFormModal(null);
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : "No se pudo guardar el método de pago.");
     } finally {
       setSaving(false);
     }
@@ -194,12 +190,12 @@ export default function MetodosPagoView() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      await api.eliminar(deleteTarget.id_metodo_pago);
-      setMetodos((prev) => prev.filter((m) => m.id_metodo_pago !== deleteTarget.id_metodo_pago));
+      await api.delete(`/metodos-pago/${deleteTarget.id_metodo_pago}`);
       setDeleteTarget(null);
       showToast("Método de pago eliminado.");
+      await cargarMetodos();
     } catch (err) {
-      setDeleteError(err.message);
+      setDeleteError(err instanceof ApiError ? err.message : "No se pudo eliminar el método de pago.");
     } finally {
       setDeleting(false);
     }
@@ -234,7 +230,29 @@ export default function MetodosPagoView() {
             </tr>
           </thead>
           <tbody>
-            {metodos.map((m) => (
+            {cargando ? (
+              <tr className="empty-row">
+                <td colSpan={5}>
+                  <div className="u-loading-row">
+                    <Loader2 size={18} className="u-spin" /> Cargando métodos de pago...
+                  </div>
+                </td>
+              </tr>
+            ) : errorCarga ? (
+              <tr className="empty-row">
+                <td colSpan={5}>
+                  <div className="alert alert-danger u-max-480">
+                    <AlertTriangle size={16} className="u-icon-inline" />
+                    <span>{errorCarga}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : metodos.length === 0 ? (
+              <tr className="empty-row">
+                <td colSpan={5}>No hay métodos de pago registrados.</td>
+              </tr>
+            ) : (
+              metodos.map((m) => (
               <tr key={m.id_metodo_pago}>
                 <td>
                   <div className="u-flex-gap-8">
@@ -278,7 +296,8 @@ export default function MetodosPagoView() {
                   )}
                 </td>
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
         </table>
       </div>

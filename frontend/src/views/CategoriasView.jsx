@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from "react";
-import { Tags, Plus, Pencil, Trash2, X, AlertTriangle, Info, Lock } from "lucide-react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { Tags, Plus, Pencil, Trash2, X, AlertTriangle, Info, Lock, Loader2 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import { sucursales as sucursalesSeed, categorias as categoriasSeed, productos as productosSeed, nombreSucursal } from "../mocks/seedData";
+import { api, ApiError } from "../services/apiClient";
 import "../styles/CategoriasView.css";
 
 /* ============================================================================
@@ -18,46 +18,28 @@ import "../styles/CategoriasView.css";
  *   - create/update -> esAdminSucursal() (admin_general por before()).
  *   - delete -> esAdminSucursal(); además el controlador bloquea con 409
  *     si la categoría tiene productos asociados.
+ *
+ * GET /api/categorias-productos ya viene con 'sucursal' anidada
+ * (CategoriaProductoController::index hace ->with('sucursal')). El conteo
+ * de productos por categoría sí requiere traer /api/productos completo
+ * porque el backend no expone ese conteo agregado.
  * ==========================================================================*/
-
-const wait = (ms = 400) => new Promise((res) => setTimeout(res, ms));
-
-const api = {
-  async crear(payload) {
-    await wait();
-    return { id_categoria: Date.now(), ...payload };
-  },
-  async editar(id_categoria, payload) {
-    await wait();
-    return { id_categoria, ...payload };
-  },
-  async eliminar(id_categoria) {
-    await wait(250);
-    const tieneProductos = productosSeed.some((p) => p.categoria_id === id_categoria);
-    if (tieneProductos) {
-      const error = new Error("No se puede eliminar la categoría porque tiene productos asociados.");
-      error.status = 409;
-      throw error;
-    }
-    return true;
-  },
-};
 
 function puedeGestionar(actor) {
   return actorEsAdminGeneral(actor) || actor.rol === "admin_sucursal";
 }
 
-function categoriaVisible(actor, categoria) {
+function categoriaVisible(actor, categoria, sucursales) {
   if (actorEsAdminGeneral(actor)) return true;
-  const sucursalActorId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
+  const sucursalActorId = sucursales.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
   return categoria.sucursal_id === sucursalActorId;
 }
 
 
-function FormModal({ actor, initial, onCancel, onSubmit, saving, existentes }) {
+function FormModal({ actor, initial, onCancel, onSubmit, saving, existentes, sucursales }) {
   const isEdit = Boolean(initial);
   const admin = actorEsAdminGeneral(actor);
-  const sucursalActorId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal ?? null;
+  const sucursalActorId = sucursales.find((s) => s.nombre === actor.sucursal)?.id_sucursal ?? null;
 
   const [nombre, setNombre] = useState(initial?.nombre ?? "");
   const [sucursalId, setSucursalId] = useState(initial ? initial.sucursal_id : admin ? "" : sucursalActorId);
@@ -104,7 +86,7 @@ function FormModal({ actor, initial, onCancel, onSubmit, saving, existentes }) {
           {admin ? (
             <select className="field-select" value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} disabled={isEdit}>
               <option value="">Selecciona una sucursal</option>
-              {sucursalesSeed.map((s) => (
+              {sucursales.map((s) => (
                 <option key={s.id_sucursal} value={s.id_sucursal}>
                   {s.nombre}
                 </option>
@@ -169,7 +151,11 @@ function ConfirmDeleteModal({ categoria, onCancel, onConfirm, deleting, error })
 
 export default function CategoriasView() {
   const { usuario: actor } = useAuth();
-  const [categorias, setCategorias] = useState(categoriasSeed);
+  const [categorias, setCategorias] = useState([]);
+  const [sucursales, setSucursales] = useState([]);
+  const [productos, setProductos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
   const [formModal, setFormModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
@@ -179,9 +165,35 @@ export default function CategoriasView() {
 
   const autorizado = puedeGestionar(actor);
 
-  const visibles = useMemo(() => categorias.filter((c) => categoriaVisible(actor, c)), [categorias, actor]);
+  const cargarDatos = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(null);
+    try {
+      const [categoriasData, sucursalesData, productosData] = await Promise.all([
+        api.getAllPages("/categorias-productos"),
+        api.getAllPages("/sucursales"),
+        api.getAllPages("/productos"),
+      ]);
+      setCategorias(categoriasData);
+      setSucursales(sucursalesData);
+      setProductos(productosData);
+    } catch (e) {
+      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar las categorías.");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
 
-  const conteoProductos = (id_categoria) => productosSeed.filter((p) => p.categoria_id === id_categoria).length;
+  useEffect(() => {
+    if (autorizado) cargarDatos();
+  }, [autorizado, cargarDatos]);
+
+  const visibles = useMemo(
+    () => categorias.filter((c) => categoriaVisible(actor, c, sucursales)),
+    [categorias, actor, sucursales]
+  );
+
+  const conteoProductos = (id_categoria) => productos.filter((p) => p.categoria_id === id_categoria).length;
 
   function showToast(msg) {
     setToast(msg);
@@ -192,15 +204,16 @@ export default function CategoriasView() {
     setSaving(true);
     try {
       if (formModal.mode === "edit") {
-        const actualizada = await api.editar(formModal.categoria.id_categoria, payload);
-        setCategorias((prev) => prev.map((c) => (c.id_categoria === actualizada.id_categoria ? { ...c, ...actualizada } : c)));
+        await api.put(`/categorias-productos/${formModal.categoria.id_categoria}`, payload);
         showToast("Categoría actualizada.");
       } else {
-        const creada = await api.crear(payload);
-        setCategorias((prev) => [...prev, creada]);
+        await api.post("/categorias-productos", payload);
         showToast("Categoría creada.");
       }
+      await cargarDatos();
       setFormModal(null);
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : "No se pudo guardar la categoría.");
     } finally {
       setSaving(false);
     }
@@ -210,12 +223,12 @@ export default function CategoriasView() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      await api.eliminar(deleteTarget.id_categoria);
-      setCategorias((prev) => prev.filter((c) => c.id_categoria !== deleteTarget.id_categoria));
+      await api.delete(`/categorias-productos/${deleteTarget.id_categoria}`);
       setDeleteTarget(null);
       showToast("Categoría eliminada.");
+      await cargarDatos();
     } catch (err) {
-      setDeleteError(err.message);
+      setDeleteError(err instanceof ApiError ? err.message : "No se pudo eliminar la categoría.");
     } finally {
       setDeleting(false);
     }
@@ -267,7 +280,24 @@ export default function CategoriasView() {
             </tr>
           </thead>
           <tbody>
-            {visibles.length === 0 ? (
+            {cargando ? (
+              <tr className="empty-row">
+                <td colSpan={4}>
+                  <div className="u-loading-row">
+                    <Loader2 size={18} className="u-spin" /> Cargando categorías...
+                  </div>
+                </td>
+              </tr>
+            ) : errorCarga ? (
+              <tr className="empty-row">
+                <td colSpan={4}>
+                  <div className="alert alert-danger u-max-480">
+                    <AlertTriangle size={16} className="u-icon-inline" />
+                    <span>{errorCarga}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : visibles.length === 0 ? (
               <tr className="empty-row">
                 <td colSpan={4}>No hay categorías registradas.</td>
               </tr>
@@ -280,7 +310,7 @@ export default function CategoriasView() {
                       {c.nombre}
                     </div>
                   </td>
-                  {actorEsAdminGeneral(actor) && <td>{nombreSucursal(c.sucursal_id)}</td>}
+                  {actorEsAdminGeneral(actor) && <td>{c.sucursal?.nombre ?? "—"}</td>}
                   <td className="text-mono">{conteoProductos(c.id_categoria)}</td>
                   <td>
                     <div className="cv-actions-cell">
@@ -311,6 +341,7 @@ export default function CategoriasView() {
           initial={formModal.mode === "edit" ? formModal.categoria : null}
           saving={saving}
           existentes={categorias}
+          sucursales={sucursales}
           onCancel={() => setFormModal(null)}
           onSubmit={handleSubmit}
         />

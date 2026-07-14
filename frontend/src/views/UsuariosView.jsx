@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   UserPlus,
   Pencil,
@@ -8,15 +8,10 @@ import {
   AlertTriangle,
   Info,
   Lock,
+  Loader2,
 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import {
-  roles as rolesSeed,
-  sucursales as sucursalesSeed,
-  usuarios as usuariosSeed,
-  nombreRol,
-  nombreSucursal,
-} from "../mocks/seedData";
+import { api, ApiError } from "../services/apiClient";
 import "../styles/UsuariosView.css";
 
 /* ============================================================================
@@ -41,51 +36,27 @@ import "../styles/UsuariosView.css";
  * ser obligatorio para cualquier rol que no sea admin_general, y forzado
  * a null si el rol es admin_general. StoreUsuarioRequest solo valida
  * 'nullable', sin relacionar el campo con el rol elegido.
+ *
+ * NOTA: actor.sucursal (de AuthContext) es un NOMBRE, no un id — es una
+ * limitación conocida y documentada en AuthContext.jsx. Por eso aquí se
+ * resuelve el sucursal_id del actor buscando por nombre en la lista de
+ * sucursales ya cargada, en vez de comparar ids directo.
  * ==========================================================================*/
-
-const wait = (ms = 400) => new Promise((res) => setTimeout(res, ms));
-
-const api = {
-  async listar() {
-    await wait();
-    return usuariosSeed;
-  },
-  async crear(payload) {
-    await wait();
-    return { id_usuario: Date.now(), activo: true, ...payload };
-  },
-  async editar(id_usuario, payload) {
-    await wait();
-    return { id_usuario, ...payload };
-  },
-  async eliminar(id_usuario, usuarios) {
-    await wait(250);
-    const usuario = usuarios.find((u) => u.id_usuario === id_usuario);
-    if (usuario?.tieneVentas) {
-      const error = new Error(
-        "No se puede eliminar el usuario porque tiene ventas registradas. Desactívalo en su lugar."
-      );
-      error.status = 409;
-      throw error;
-    }
-    return true;
-  },
-};
 
 // --- Reglas de permisos, espejo de UsuarioPolicy ---------------------------
 function puedeGestionarUsuarios(actor) {
   return actorEsAdminGeneral(actor) || actor.rol === "admin_sucursal";
 }
 
-function usuarioVisibleParaActor(actor, usuario) {
+function usuarioVisibleParaActor(actor, usuario, sucursales) {
   if (actorEsAdminGeneral(actor)) return true;
-  const sucursalActorId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
+  const sucursalActorId = sucursales.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
   return usuario.sucursal_id === sucursalActorId;
 }
 
-function puedeEliminar(actor, usuario, actorIdUsuario) {
+function puedeEliminar(actor, usuario, actorIdUsuario, sucursales) {
   if (usuario.id_usuario === actorIdUsuario) return false; // nadie se elimina a sí mismo
-  return usuarioVisibleParaActor(actor, usuario);
+  return usuarioVisibleParaActor(actor, usuario, sucursales);
 }
 
 
@@ -93,10 +64,10 @@ function FieldWrap({ children }) {
   return <div className="field">{children}</div>;
 }
 
-function UserFormModal({ actor, initial, onCancel, onSubmit, saving }) {
+function UserFormModal({ actor, initial, onCancel, onSubmit, saving, roles, sucursales }) {
   const isEdit = Boolean(initial);
   const admin = actorEsAdminGeneral(actor);
-  const sucursalActorId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal ?? null;
+  const sucursalActorId = sucursales.find((s) => s.nombre === actor.sucursal)?.id_sucursal ?? null;
 
   const [nombre, setNombre] = useState(initial?.nombre ?? "");
   const [rolId, setRolId] = useState(initial?.rol_id ?? "");
@@ -107,14 +78,14 @@ function UserFormModal({ actor, initial, onCancel, onSubmit, saving }) {
   const [activo, setActivo] = useState(initial?.activo ?? true);
   const [touched, setTouched] = useState(false);
 
-  const rolSeleccionado = rolesSeed.find((r) => r.id_rol === Number(rolId));
+  const rolSeleccionado = roles.find((r) => r.id_rol === Number(rolId));
   const esRolAdminGeneral = rolSeleccionado?.nombre === "admin_general";
 
   // Solo admin_general puede crear/dejar otro admin_general (sucursal null).
   // Si el actor no es admin_general, ese rol ni se lista como opción.
   const rolesDisponibles = admin
-    ? rolesSeed.filter((r) => r.activo || r.id_rol === initial?.rol_id)
-    : rolesSeed.filter((r) => r.nombre !== "admin_general" && (r.activo || r.id_rol === initial?.rol_id));
+    ? roles.filter((r) => r.activo || r.id_rol === initial?.rol_id)
+    : roles.filter((r) => r.nombre !== "admin_general" && (r.activo || r.id_rol === initial?.rol_id));
 
   const passwordValida = isEdit ? password === "" || password.length >= 8 : password.length >= 8;
   const sucursalRequerida = !esRolAdminGeneral;
@@ -182,7 +153,7 @@ function UserFormModal({ actor, initial, onCancel, onSubmit, saving }) {
             ) : admin ? (
               <select className="field-select" value={sucursalId} onChange={(e) => setSucursalId(e.target.value)}>
                 <option value="">Selecciona una sucursal</option>
-                {sucursalesSeed.map((s) => (
+                {sucursales.map((s) => (
                   <option key={s.id_sucursal} value={s.id_sucursal}>
                     {s.nombre}
                   </option>
@@ -270,7 +241,11 @@ function ConfirmDeleteModal({ usuario, onCancel, onConfirm, deleting, error }) {
 
 export default function UsuariosView() {
   const { usuario: actor } = useAuth();
-  const [usuarios, setUsuarios] = useState(usuariosSeed);
+  const [usuarios, setUsuarios] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [sucursales, setSucursales] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
   const [formModal, setFormModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
@@ -282,21 +257,44 @@ export default function UsuariosView() {
 
   const autorizado = puedeGestionarUsuarios(actor);
 
+  const cargarDatos = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(null);
+    try {
+      const [usuariosData, rolesData, sucursalesData] = await Promise.all([
+        api.getAllPages("/usuarios"),
+        api.getAllPages("/roles"),
+        api.getAllPages("/sucursales"),
+      ]);
+      setUsuarios(usuariosData);
+      setRoles(rolesData);
+      setSucursales(sucursalesData);
+    } catch (e) {
+      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar los usuarios.");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (autorizado) cargarDatos();
+  }, [autorizado, cargarDatos]);
+
   const visibles = useMemo(() => {
     return usuarios
-      .filter((u) => usuarioVisibleParaActor(actor, u))
+      .filter((u) => usuarioVisibleParaActor(actor, u, sucursales))
       .filter((u) => !filtroRol || u.rol_id === Number(filtroRol))
       .filter((u) => !busqueda.trim() || u.nombre.toLowerCase().includes(busqueda.toLowerCase()));
-  }, [usuarios, actor, filtroRol, busqueda]);
+  }, [usuarios, actor, sucursales, filtroRol, busqueda]);
 
   const stats = useMemo(() => {
-    const base = usuarios.filter((u) => usuarioVisibleParaActor(actor, u));
+    const base = usuarios.filter((u) => usuarioVisibleParaActor(actor, u, sucursales));
     return {
       total: base.length,
       activos: base.filter((u) => u.activo).length,
       inactivos: base.filter((u) => !u.activo).length,
     };
-  }, [usuarios, actor]);
+  }, [usuarios, actor, sucursales]);
 
   function showToast(msg) {
     setToast(msg);
@@ -307,17 +305,16 @@ export default function UsuariosView() {
     setSaving(true);
     try {
       if (formModal.mode === "edit") {
-        const actualizado = await api.editar(formModal.usuario.id_usuario, payload);
-        setUsuarios((prev) =>
-          prev.map((u) => (u.id_usuario === actualizado.id_usuario ? { ...u, ...actualizado } : u))
-        );
+        await api.put(`/usuarios/${formModal.usuario.id_usuario}`, payload);
         showToast("Usuario actualizado correctamente.");
       } else {
-        const creado = await api.crear(payload);
-        setUsuarios((prev) => [...prev, creado]);
+        await api.post("/usuarios", payload);
         showToast("Usuario creado correctamente.");
       }
+      await cargarDatos();
       setFormModal(null);
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : "No se pudo guardar el usuario.");
     } finally {
       setSaving(false);
     }
@@ -327,12 +324,12 @@ export default function UsuariosView() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      await api.eliminar(deleteTarget.id_usuario, usuarios);
-      setUsuarios((prev) => prev.filter((u) => u.id_usuario !== deleteTarget.id_usuario));
+      await api.delete(`/usuarios/${deleteTarget.id_usuario}`);
       setDeleteTarget(null);
       showToast("Usuario eliminado.");
+      await cargarDatos();
     } catch (err) {
-      setDeleteError(err.message);
+      setDeleteError(err instanceof ApiError ? err.message : "No se pudo eliminar el usuario.");
     } finally {
       setDeleting(false);
     }
@@ -399,7 +396,7 @@ export default function UsuariosView() {
           onChange={(e) => setFiltroRol(e.target.value)}
         >
           <option value="">Todos los roles</option>
-          {rolesSeed.map((r) => (
+          {roles.map((r) => (
             <option key={r.id_rol} value={r.id_rol}>
               {r.nombre}
             </option>
@@ -419,7 +416,24 @@ export default function UsuariosView() {
             </tr>
           </thead>
           <tbody>
-            {visibles.length === 0 ? (
+            {cargando ? (
+              <tr className="empty-row">
+                <td colSpan={5}>
+                  <div className="u-loading-row">
+                    <Loader2 size={18} className="u-spin" /> Cargando usuarios...
+                  </div>
+                </td>
+              </tr>
+            ) : errorCarga ? (
+              <tr className="empty-row">
+                <td colSpan={5}>
+                  <div className="alert alert-danger u-max-480">
+                    <AlertTriangle size={16} className="u-icon-inline" />
+                    <span>{errorCarga}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : visibles.length === 0 ? (
               <tr className="empty-row">
                 <td colSpan={5}>No hay usuarios que coincidan con el filtro.</td>
               </tr>
@@ -433,9 +447,9 @@ export default function UsuariosView() {
                     </div>
                   </td>
                   <td>
-                    <span className="badge badge-neutral">{nombreRol(u.rol_id)}</span>
+                    <span className="badge badge-neutral">{u.rol?.nombre ?? "—"}</span>
                   </td>
-                  <td>{nombreSucursal(u.sucursal_id) ?? "—"}</td>
+                  <td>{u.sucursal?.nombre ?? "—"}</td>
                   <td>
                     <span className={`badge ${u.activo ? "badge-success" : "badge-neutral"}`}>
                       {u.activo ? "Activo" : "Inactivo"}
@@ -451,7 +465,7 @@ export default function UsuariosView() {
                       </button>
                       <button
                         className="btn btn-danger-ghost btn-sm"
-                        disabled={!puedeEliminar(actor, u, actor.id_usuario)}
+                        disabled={!puedeEliminar(actor, u, actor.id_usuario, sucursales)}
                         title={
                           u.id_usuario === actor.id_usuario
                             ? "No puedes eliminar tu propio usuario"
@@ -478,6 +492,8 @@ export default function UsuariosView() {
           actor={actor}
           initial={formModal.mode === "edit" ? formModal.usuario : null}
           saving={saving}
+          roles={roles}
+          sucursales={sucursales}
           onCancel={() => setFormModal(null)}
           onSubmit={handleSubmit}
         />

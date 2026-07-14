@@ -1,14 +1,7 @@
-import React, { useState, useMemo } from "react";
-import { Package, Plus, Pencil, Trash2, X, Search, AlertTriangle, Info, Lock } from "lucide-react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { Package, Plus, Pencil, Trash2, X, Search, AlertTriangle, Info, Lock, Loader2 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import {
-  sucursales as sucursalesSeed,
-  productos as productosSeed,
-  categoriasDeSucursal,
-  nombreCategoria,
-  nombreSucursal,
-  stockDe,
-} from "../mocks/seedData";
+import { api, ApiError } from "../services/apiClient";
 import "../styles/ProductosView.css";
 
 /* ============================================================================
@@ -24,56 +17,33 @@ import "../styles/ProductosView.css";
  * vender), create/update/delete=esAdminSucursal() (admin_general por
  * before()). Igual que Categorías: la pantalla de GESTIÓN (esta) solo
  * está en la Sidebar para admin_general/admin_sucursal — el cajero
- * accederá a los productos desde NuevaVentaView (aún no construida), que
- * es una experiencia de solo-consulta distinta a este CRUD.
+ * accederá a los productos desde NuevaVentaView, que es una experiencia
+ * de solo-consulta distinta a este CRUD.
  *
  * IMPORTANTE: 'stock' no vive en Producto sino en un modelo aparte
- * (Inventario, 1:1). Aquí se lee con stockDe() pero se sigue tratando
- * como un dato de OTRO recurso — cuando se conecte la API real, el
- * store()/update() de Inventario es una llamada aparte a
- * PATCH /api/inventario/{id}/ajustar, no a /api/productos.
+ * (Inventario, 1:1). GET /api/productos ya viene con 'inventario' anidado
+ * (ProductoController::index hace ->with(['sucursal', 'categoria',
+ * 'inventario'])), así que se lee con p.inventario?.cantidad — pero
+ * ajustar el stock sigue siendo una llamada aparte a
+ * PATCH /api/inventario/{id}/ajustar, no a /api/productos (por eso este
+ * CRUD no toca el stock de un producto ya creado, solo lo fija al crear).
  * ==========================================================================*/
-
-const wait = (ms = 400) => new Promise((res) => setTimeout(res, ms));
-
-const api = {
-  async crear(payload) {
-    await wait();
-    return { id_producto: Date.now(), activo: true, ...payload };
-  },
-  async editar(id_producto, payload) {
-    await wait();
-    return { id_producto, ...payload };
-  },
-  async eliminar(id_producto, productos) {
-    await wait(250);
-    const producto = productos.find((p) => p.id_producto === id_producto);
-    if (producto?.tieneVentas) {
-      const error = new Error(
-        "No se puede eliminar el producto porque tiene ventas registradas. Desactívalo en su lugar."
-      );
-      error.status = 409;
-      throw error;
-    }
-    return true;
-  },
-};
 
 function puedeGestionar(actor) {
   return actorEsAdminGeneral(actor) || actor.rol === "admin_sucursal";
 }
 
-function productoVisible(actor, producto) {
+function productoVisible(actor, producto, sucursales) {
   if (actorEsAdminGeneral(actor)) return true;
-  const sucursalActorId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
+  const sucursalActorId = sucursales.find((s) => s.nombre === actor.sucursal)?.id_sucursal;
   return producto.sucursal_id === sucursalActorId;
 }
 
 
-function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existentes, stockInicialActual }) {
+function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existentes, stockInicialActual, sucursales, categorias }) {
   const isEdit = Boolean(initial);
   const admin = actorEsAdminGeneral(actor);
-  const sucursalActorId = sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal ?? null;
+  const sucursalActorId = sucursales.find((s) => s.nombre === actor.sucursal)?.id_sucursal ?? null;
 
   const [nombre, setNombre] = useState(initial?.nombre ?? "");
   const [descripcion, setDescripcion] = useState(initial?.descripcion ?? "");
@@ -86,7 +56,7 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
   const [activo, setActivo] = useState(initial?.activo ?? true);
   const [touched, setTouched] = useState(false);
 
-  const categoriasDisponibles = sucursalId ? categoriasDeSucursal(Number(sucursalId)) : [];
+  const categoriasDisponibles = sucursalId ? categorias.filter((c) => c.sucursal_id === Number(sucursalId)) : [];
 
   const nombreValido = nombre.trim().length >= 2;
   const precioValido = precioBase !== "" && Number(precioBase) >= 0;
@@ -161,7 +131,7 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
             {admin ? (
               <select className="field-select" value={sucursalId} onChange={(e) => handleSucursalChange(e.target.value)} disabled={isEdit}>
                 <option value="">Selecciona una sucursal</option>
-                {sucursalesSeed.map((s) => (
+                {sucursales.map((s) => (
                   <option key={s.id_sucursal} value={s.id_sucursal}>
                     {s.nombre}
                   </option>
@@ -300,7 +270,11 @@ function ConfirmDeleteModal({ producto, onCancel, onConfirm, deleting, error }) 
 
 export default function ProductosView() {
   const { usuario: actor } = useAuth();
-  const [productos, setProductos] = useState(productosSeed);
+  const [productos, setProductos] = useState([]);
+  const [sucursales, setSucursales] = useState([]);
+  const [categorias, setCategorias] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
   const [formModal, setFormModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
@@ -312,18 +286,41 @@ export default function ProductosView() {
 
   const autorizado = puedeGestionar(actor);
 
+  const cargarDatos = useCallback(async () => {
+    setCargando(true);
+    setErrorCarga(null);
+    try {
+      const [productosData, sucursalesData, categoriasData] = await Promise.all([
+        api.getAllPages("/productos"),
+        api.getAllPages("/sucursales"),
+        api.getAllPages("/categorias-productos"),
+      ]);
+      setProductos(productosData);
+      setSucursales(sucursalesData);
+      setCategorias(categoriasData);
+    } catch (e) {
+      setErrorCarga(e instanceof ApiError ? e.message : "No se pudieron cargar los productos.");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (autorizado) cargarDatos();
+  }, [autorizado, cargarDatos]);
+
   const visibles = useMemo(() => {
     return productos
-      .filter((p) => productoVisible(actor, p))
+      .filter((p) => productoVisible(actor, p, sucursales))
       .filter((p) => !filtroCategoria || p.categoria_id === Number(filtroCategoria))
       .filter((p) => !busqueda.trim() || p.nombre.toLowerCase().includes(busqueda.toLowerCase()));
-  }, [productos, actor, filtroCategoria, busqueda]);
+  }, [productos, actor, sucursales, filtroCategoria, busqueda]);
 
   const stats = useMemo(() => {
-    const base = productos.filter((p) => productoVisible(actor, p));
-    const bajoStock = base.filter((p) => p.maneja_stock && (stockDe(p.id_producto) ?? 0) < p.stock_minimo).length;
+    const base = productos.filter((p) => productoVisible(actor, p, sucursales));
+    const bajoStock = base.filter((p) => p.maneja_stock && (p.inventario?.cantidad ?? 0) < p.stock_minimo).length;
     return { total: base.length, activos: base.filter((p) => p.activo).length, bajoStock };
-  }, [productos, actor]);
+  }, [productos, actor, sucursales]);
 
   function showToast(msg) {
     setToast(msg);
@@ -334,15 +331,16 @@ export default function ProductosView() {
     setSaving(true);
     try {
       if (formModal.mode === "edit") {
-        const actualizado = await api.editar(formModal.producto.id_producto, payload);
-        setProductos((prev) => prev.map((p) => (p.id_producto === actualizado.id_producto ? { ...p, ...actualizado } : p)));
+        await api.put(`/productos/${formModal.producto.id_producto}`, payload);
         showToast("Producto actualizado.");
       } else {
-        const creado = await api.crear(payload);
-        setProductos((prev) => [...prev, creado]);
+        await api.post("/productos", payload);
         showToast("Producto creado.");
       }
+      await cargarDatos();
       setFormModal(null);
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : "No se pudo guardar el producto.");
     } finally {
       setSaving(false);
     }
@@ -352,12 +350,12 @@ export default function ProductosView() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      await api.eliminar(deleteTarget.id_producto, productos);
-      setProductos((prev) => prev.filter((p) => p.id_producto !== deleteTarget.id_producto));
+      await api.delete(`/productos/${deleteTarget.id_producto}`);
       setDeleteTarget(null);
       showToast("Producto eliminado.");
+      await cargarDatos();
     } catch (err) {
-      setDeleteError(err.message);
+      setDeleteError(err instanceof ApiError ? err.message : "No se pudo eliminar el producto.");
     } finally {
       setDeleting(false);
     }
@@ -416,15 +414,13 @@ export default function ProductosView() {
         <select className="field-select pv-select" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
           <option value="">Todas las categorías</option>
           {(actorEsAdminGeneral(actor)
-            ? [...new Map(productos.map((p) => [p.categoria_id, p.categoria_id])).keys()]
-            : categoriasDeSucursal(sucursalesSeed.find((s) => s.nombre === actor.sucursal)?.id_sucursal).map((c) => c.id_categoria)
-          )
-            .filter(Boolean)
-            .map((id) => (
-              <option key={id} value={id}>
-                {nombreCategoria(id)}
-              </option>
-            ))}
+            ? [...new Map(productos.filter((p) => p.categoria).map((p) => [p.categoria.id_categoria, p.categoria])).values()]
+            : categorias.filter((c) => c.sucursal_id === sucursales.find((s) => s.nombre === actor.sucursal)?.id_sucursal)
+          ).map((c) => (
+            <option key={c.id_categoria} value={c.id_categoria}>
+              {c.nombre}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -442,13 +438,30 @@ export default function ProductosView() {
             </tr>
           </thead>
           <tbody>
-            {visibles.length === 0 ? (
+            {cargando ? (
+              <tr className="empty-row">
+                <td colSpan={7}>
+                  <div className="u-loading-row">
+                    <Loader2 size={18} className="u-spin" /> Cargando productos...
+                  </div>
+                </td>
+              </tr>
+            ) : errorCarga ? (
+              <tr className="empty-row">
+                <td colSpan={7}>
+                  <div className="alert alert-danger u-max-480">
+                    <AlertTriangle size={16} className="u-icon-inline" />
+                    <span>{errorCarga}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : visibles.length === 0 ? (
               <tr className="empty-row">
                 <td colSpan={7}>No hay productos que coincidan con el filtro.</td>
               </tr>
             ) : (
               visibles.map((p) => {
-                const stock = stockDe(p.id_producto);
+                const stock = p.inventario?.cantidad ?? null;
                 const stockBajo = p.maneja_stock && stock !== null && stock < p.stock_minimo;
                 return (
                   <tr key={p.id_producto}>
@@ -459,9 +472,9 @@ export default function ProductosView() {
                       </div>
                     </td>
                     <td>
-                      <span className="badge badge-neutral">{nombreCategoria(p.categoria_id)}</span>
+                      <span className="badge badge-neutral">{p.categoria?.nombre ?? "Sin categoría"}</span>
                     </td>
-                    {actorEsAdminGeneral(actor) && <td>{nombreSucursal(p.sucursal_id)}</td>}
+                    {actorEsAdminGeneral(actor) && <td>{p.sucursal?.nombre ?? "—"}</td>}
                     <td className="text-mono">${Number(p.precio_base).toLocaleString("es-CO")}</td>
                     <td>
                       {!p.maneja_stock ? (
@@ -508,7 +521,9 @@ export default function ProductosView() {
           initial={formModal.mode === "edit" ? formModal.producto : null}
           saving={saving}
           existentes={productos}
-          stockInicialActual={formModal.mode === "edit" ? stockDe(formModal.producto.id_producto) ?? 0 : 0}
+          stockInicialActual={formModal.mode === "edit" ? formModal.producto.inventario?.cantidad ?? 0 : 0}
+          sucursales={sucursales}
+          categorias={categorias}
           onCancel={() => setFormModal(null)}
           onSubmit={handleSubmit}
         />
