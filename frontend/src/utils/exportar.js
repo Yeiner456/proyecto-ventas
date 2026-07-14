@@ -77,6 +77,90 @@ export function descargarPDF({ nombreArchivo, titulo, subtitulo, columnas, datos
 }
 
 /**
+ * PDF de una factura individual (no un reporte tabular como descargarPDF).
+ * Se generó porque FacturaService (backend) crea el registro en BD pero
+ * nunca produce un archivo real — el campo 'pdf_ruta' del modelo Factura
+ * existe mas nunca se llena, y no hay ningún endpoint que sirva un PDF.
+ * En vez de tocar el backend a días de la entrega, se arma aquí con los
+ * mismos datos que ya carga el modal de detalle (GET /api/ventas/{id}),
+ * mismo patrón que ya se usó para Reportes: todo en el navegador, cero
+ * endpoints nuevos.
+ *
+ * @param factura objeto de GET /api/facturas (numero_factura, total, created_at, sucursal, cajero)
+ * @param venta   objeto de GET /api/ventas/{id} (detalles.producto, metodo_pago)
+ */
+export function descargarFacturaPDF(factura, venta) {
+  const doc = new jsPDF({ orientation: "portrait" });
+  const formatMoney = (n) => `$${Number(n).toLocaleString("es-CO")}`;
+  const formatFecha = (iso) =>
+    new Date(iso).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
+
+  // --- Encabezado ---
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(...INK);
+  doc.text("Factura", 14, 20);
+
+  doc.setFontSize(12);
+  doc.setTextColor(...SENA_GREEN);
+  doc.text(factura.numero_factura, 14, 28);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(...TEXT_SECONDARY);
+  doc.text(formatFecha(factura.created_at), 14, 34);
+
+  // --- Datos de la venta (sucursal / cajero / método de pago) ---
+  const datosVenta = [
+    ["Sucursal", factura.sucursal?.nombre ?? "—"],
+    ["Cajero", factura.cajero?.nombre ?? "—"],
+    ["Método de pago", venta?.metodo_pago?.nombre ?? "—"],
+    ["Venta asociada", `#${factura.venta_id}`],
+  ];
+
+  autoTable(doc, {
+    startY: 40,
+    body: datosVenta,
+    theme: "plain",
+    styles: { fontSize: 9, textColor: INK, cellPadding: { top: 1, bottom: 1, left: 0, right: 4 } },
+    columnStyles: { 0: { fontStyle: "bold", textColor: TEXT_SECONDARY, cellWidth: 40 } },
+  });
+
+  // --- Tabla de productos ---
+  const detalles = venta?.detalles ?? [];
+  const filasProductos = detalles.map((d) => [
+    d.producto?.nombre ?? "Producto eliminado",
+    String(d.cantidad),
+    formatMoney(d.precio_unitario_venta),
+    formatMoney(d.cantidad * d.precio_unitario_venta),
+  ]);
+
+  autoTable(doc, {
+    startY: doc.lastAutoTable.finalY + 6,
+    head: [["Producto", "Cant.", "Precio unit.", "Subtotal"]],
+    body: filasProductos,
+    headStyles: { fillColor: SENA_GREEN, textColor: WHITE, fontStyle: "bold" },
+    styles: { fontSize: 9, textColor: INK },
+    alternateRowStyles: { fillColor: ROW_ALT },
+    columnStyles: {
+      1: { halign: "right", cellWidth: 20 },
+      2: { halign: "right", cellWidth: 35 },
+      3: { halign: "right", cellWidth: 35 },
+    },
+  });
+
+  // --- Total ---
+  const finalY = doc.lastAutoTable.finalY + 10;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(...INK);
+  doc.text("Total", 140, finalY, { align: "right" });
+  doc.text(formatMoney(factura.total), 196, finalY, { align: "right" });
+
+  doc.save(`${factura.numero_factura}.pdf`);
+}
+
+/**
  * ej: nombreArchivoConFecha("inventario", "Sucursal Centro")
  *     -> "inventario_Sucursal-Centro_2026-07-09"
  */

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { FileText, Search, X, AlertTriangle, Download, Receipt, Loader2 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError } from "../services/apiClient";
+import { descargarFacturaPDF } from "../utils/exportar";
 import "../styles/FacturasView.css";
 
 /* ============================================================================
@@ -23,11 +24,13 @@ import "../styles/FacturasView.css";
  * cajero — es el único listado de "Ventas" al que el cajero también
  * tiene acceso además de Nueva venta/Registro de ventas).
  *
- * NOTA: el modelo Factura tiene un campo 'pdf_ruta', pero no encontré
- * ningún endpoint que lo sirva o genere un PDF descargable — ni en
- * FacturaController ni en routes/api.php. El botón "Descargar PDF" de
- * abajo está deshabilitado a propósito con esa explicación; lo dejo como
- * pendiente a discutir con el equipo, no lo invento en el frontend.
+ * DESCARGA DE PDF: el modelo Factura tiene un campo 'pdf_ruta', pero
+ * FacturaService nunca lo llena y no existe ningún endpoint que sirva o
+ * genere un PDF — ni en FacturaController ni en routes/api.php. En vez
+ * de tocar el backend (instalar librería PHP, endpoint nuevo) a días de
+ * la entrega, el PDF se arma en el navegador con los mismos datos que
+ * ya carga este modal (descargarFacturaPDF() en utils/exportar.js) —
+ * mismo patrón ya probado en ReportesView, cero endpoints nuevos.
  *
  * DETALLE DE LA FACTURA: FacturaController::show() NO carga
  * venta.metodoPago (solo 'venta.detalles.producto', 'sucursal', 'cajero'),
@@ -142,8 +145,9 @@ function FacturaDetalleModal({ factura, onClose }) {
         <div className="modal-actions">
           <button
             className="btn btn-outline"
-            disabled
-            title="El backend aún no expone un endpoint para descargar el PDF de la factura"
+            disabled={cargando || !venta}
+            onClick={() => descargarFacturaPDF(factura, venta)}
+            title={cargando ? "Cargando datos de la venta..." : undefined}
           >
             <Download size={14} /> Descargar PDF
           </button>
