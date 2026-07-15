@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { comprobanteUrl } from "../services/apiClient";
 
 /* ============================================================================
  * exportar.js — genera los archivos Excel/PDF en el navegador.
@@ -89,7 +90,43 @@ export function descargarPDF({ nombreArchivo, titulo, subtitulo, columnas, datos
  * @param factura objeto de GET /api/facturas (numero_factura, total, created_at, sucursal, cajero)
  * @param venta   objeto de GET /api/ventas/{id} (detalles.producto, metodo_pago)
  */
-export function descargarFacturaPDF(factura, venta) {
+function cargarImagenComoDataURL(url) {
+  return fetch(url)
+    .then((res) => {
+      if (!res.ok) throw new Error(`No se pudo descargar la imagen (${res.status})`);
+      return res.blob();
+    })
+    .then(
+      (blob) =>
+        new Promise((resolve, reject) => {
+          const lector = new FileReader();
+          lector.onloadend = () => resolve(lector.result);
+          lector.onerror = () => reject(new Error("No se pudo leer la imagen descargada."));
+          lector.readAsDataURL(blob);
+        })
+    );
+}
+
+function dimensionesImagen(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error("No se pudo leer las dimensiones de la imagen."));
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * @param factura objeto de GET /api/facturas (numero_factura, total, created_at, sucursal, cajero)
+ * @param venta   objeto de GET /api/ventas/{id} (detalles.producto, metodo_pago, comprobantes)
+ *
+ * Es async porque, si la venta tiene un comprobante tipo imagen, hay que
+ * descargarlo (fetch) antes de poder incrustarlo con doc.addImage(). Un
+ * comprobante en PDF NO se puede fusionar aquí sin una librería aparte
+ * (jsPDF no lee/combina PDFs ajenos) — en ese caso se deja una nota en
+ * vez de fingir que se incrustó.
+ */
+export async function descargarFacturaPDF(factura, venta) {
   const doc = new jsPDF({ orientation: "portrait" });
   const formatMoney = (n) => `$${Number(n).toLocaleString("es-CO")}`;
   const formatFecha = (iso) =>
@@ -156,6 +193,54 @@ export function descargarFacturaPDF(factura, venta) {
   doc.setTextColor(...INK);
   doc.text("Total", 140, finalY, { align: "right" });
   doc.text(formatMoney(factura.total), 196, finalY, { align: "right" });
+
+  // --- Comprobante de pago, como página(s) adicional(es) ---
+  const comprobantes = venta?.comprobantes ?? [];
+  for (const c of comprobantes) {
+    const esImagen = ["jpg", "jpeg", "png"].includes((c.tipo_archivo ?? "").toLowerCase());
+
+    doc.addPage();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(...INK);
+    doc.text("Comprobante de pago", 14, 18);
+
+    if (!esImagen) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...TEXT_SECONDARY);
+      doc.text(
+        `Este comprobante se subió como archivo PDF y no se puede incrustar aquí. Descárgalo por separado desde el detalle de la venta (Comprobante.${c.tipo_archivo}).`,
+        14,
+        28,
+        { maxWidth: 182 }
+      );
+      continue;
+    }
+
+    try {
+      const dataUrl = await cargarImagenComoDataURL(comprobanteUrl(c.id_comprobante));
+      const { width, height } = await dimensionesImagen(dataUrl);
+
+      // Ajustar la imagen al ancho de la página (A4: 210mm), dejando
+      // márgenes de 14mm a cada lado, sin deformar la proporción.
+      const anchoMax = 182;
+      const altoMax = 250;
+      const escala = Math.min(anchoMax / width, altoMax / height, 1);
+      const anchoFinal = width * escala;
+      const altoFinal = height * escala;
+
+      const formato = c.tipo_archivo.toLowerCase() === "png" ? "PNG" : "JPEG";
+      doc.addImage(dataUrl, formato, 14, 26, anchoFinal, altoFinal);
+    } catch (e) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...TEXT_SECONDARY);
+      doc.text("No se pudo cargar la imagen del comprobante. Verifica la conexión con el servidor.", 14, 28, {
+        maxWidth: 182,
+      });
+    }
+  }
 
   doc.save(`${factura.numero_factura}.pdf`);
 }

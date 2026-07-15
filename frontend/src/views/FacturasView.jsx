@@ -60,6 +60,21 @@ function FacturaDetalleModal({ factura, onClose }) {
   const [venta, setVenta] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
+  const [generandoPdf, setGenerandoPdf] = useState(false);
+
+  async function handleDescargarPdf() {
+    setGenerandoPdf(true);
+    try {
+      await descargarFacturaPDF(factura, venta);
+    } catch (e) {
+      // El PDF ya maneja internamente el fallo de la imagen del
+      // comprobante (deja una nota en vez de tronar) — esto solo
+      // cubre un error inesperado al construir el documento en sí.
+      window.alert("No se pudo generar el PDF. Intenta de nuevo.");
+    } finally {
+      setGenerandoPdf(false);
+    }
+  }
 
   useEffect(() => {
     let cancelado = false;
@@ -175,11 +190,12 @@ function FacturaDetalleModal({ factura, onClose }) {
         <div className="modal-actions">
           <button
             className="btn btn-outline"
-            disabled={cargando || !venta}
-            onClick={() => descargarFacturaPDF(factura, venta)}
+            disabled={cargando || !venta || generandoPdf}
+            onClick={handleDescargarPdf}
             title={cargando ? "Cargando datos de la venta..." : undefined}
           >
-            <Download size={14} /> Descargar PDF
+            {generandoPdf ? <Loader2 size={14} className="u-spin" /> : <Download size={14} />}
+            {generandoPdf ? "Generando..." : "Descargar PDF"}
           </button>
           <button className="btn btn-primary" onClick={onClose}>
             Cerrar
