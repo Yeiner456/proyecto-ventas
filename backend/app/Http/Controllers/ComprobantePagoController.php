@@ -87,4 +87,30 @@ class ComprobantePagoController extends Controller
 
         return response()->json(null, 204);
     }
+
+    /**
+     * Sirve el archivo del comprobante directamente desde Laravel, en vez
+     * de depender de `php artisan storage:link` (symlink público/storage
+     * -> storage/app/public). En Windows + `php artisan serve`, ese
+     * symlink puede devolver 403 aunque exista y los permisos estén
+     * bien — es una limitación conocida del servidor embebido de PHP con
+     * symlinks, no un problema de este proyecto. Sirviendo el archivo
+     * por código se evita esa dependencia por completo.
+     *
+     * Ruta pública a propósito (fuera de auth:sanctum): un <img src="">
+     * en el navegador no puede mandar el header Authorization, así que
+     * si esta ruta exigiera Bearer token la imagen nunca cargaría. La
+     * "seguridad" real aquí es la misma que ya tenía el symlink: el
+     * archivo es accesible por quien tenga la URL exacta (con un nombre
+     * generado por Laravel, no adivinable), igual que cualquier archivo
+     * estático servido por un symlink público.
+     */
+    public function mostrarArchivo(ComprobantePago $comprobante)
+    {
+        if (!Storage::disk('public')->exists($comprobante->archivo_ruta)) {
+            abort(404, 'El archivo del comprobante ya no existe.');
+        }
+
+        return Storage::disk('public')->response($comprobante->archivo_ruta);
+    }
 }

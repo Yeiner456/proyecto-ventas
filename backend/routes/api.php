@@ -21,6 +21,12 @@ use Illuminate\Support\Facades\Route;
 // --- Pública: login (con límite de intentos para evitar fuerza bruta) ---
 Route::middleware('throttle:6,1')->post('login', [AuthController::class, 'login']);
 
+// --- Pública: servir el archivo de un comprobante (ver comentario en
+// ComprobantePagoController::mostrarArchivo) — un <img src=""> no puede
+// mandar el header Authorization, así que esta ruta queda fuera del
+// grupo auth:sanctum a propósito. ---
+Route::get('comprobantes-pago/{comprobante}/archivo', [ComprobantePagoController::class, 'mostrarArchivo']);
+
 // --- Protegidas: requieren token válido ---
 Route::middleware('auth:sanctum')->group(function () {
 

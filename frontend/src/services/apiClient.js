@@ -16,14 +16,13 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const TOKEN_KEY = "proyecto_ventas_token";
 
 /**
- * URL pública de un archivo guardado en el disco 'public' de Laravel
- * (ej. comprobantes de pago, subidos en ComprobantePagoController::store
- * a Storage::disk('public')). Requiere que el backend tenga corrido
- * `php artisan storage:link` una vez — sin ese symlink, esta URL da 404
- * aunque el archivo exista físicamente en storage/app/public/.
+ * URL para ver/descargar el archivo de un comprobante de pago. Apunta al
+ * endpoint público ComprobantePagoController::mostrarArchivo (ver
+ * comentario ahí) en vez del symlink de `storage:link` — ese symlink da
+ * 403 en Windows + `php artisan serve` aunque el archivo exista.
  */
-export function storageUrl(rutaRelativa) {
-  return `${BASE_URL}/storage/${rutaRelativa}`;
+export function comprobanteUrl(id_comprobante) {
+  return `${BASE_URL}/api/comprobantes-pago/${id_comprobante}/archivo`;
 }
 
 export function getToken() {

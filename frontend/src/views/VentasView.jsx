@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight, Loader2, Paperclip, ExternalLink } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import { api, ApiError, storageUrl } from "../services/apiClient";
+import { api, ApiError, comprobanteUrl } from "../services/apiClient";
 import "../styles/VentasView.css";
 
 /* ============================================================================
@@ -249,13 +249,13 @@ function DetalleModal({ venta: ventaInicial, onClose }) {
             {comprobantes.map((c) => (
               <a
                 key={c.id_comprobante}
-                href={storageUrl(c.archivo_ruta)}
+                href={comprobanteUrl(c.id_comprobante)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="vv-comprobante-item"
               >
                 {esImagen(c.tipo_archivo) ? (
-                  <img src={storageUrl(c.archivo_ruta)} alt="Comprobante de pago" className="vv-comprobante-thumb" />
+                  <img src={comprobanteUrl(c.id_comprobante)} alt="Comprobante de pago" className="vv-comprobante-thumb" />
                 ) : (
                   <span className="vv-comprobante-file">
                     <Paperclip size={14} /> Comprobante.{c.tipo_archivo}

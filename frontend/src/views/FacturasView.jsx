@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { FileText, Search, X, AlertTriangle, Download, Receipt, Loader2, Paperclip, ExternalLink } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
-import { api, ApiError, storageUrl } from "../services/apiClient";
+import { api, ApiError, comprobanteUrl } from "../services/apiClient";
 import { descargarFacturaPDF } from "../utils/exportar";
 import "../styles/FacturasView.css";
 
@@ -147,13 +147,13 @@ function FacturaDetalleModal({ factura, onClose }) {
                 {venta.comprobantes.map((c) => (
                   <a
                     key={c.id_comprobante}
-                    href={storageUrl(c.archivo_ruta)}
+                    href={comprobanteUrl(c.id_comprobante)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="fv-comprobante-item"
                   >
                     {["jpg", "jpeg", "png"].includes((c.tipo_archivo ?? "").toLowerCase()) ? (
-                      <img src={storageUrl(c.archivo_ruta)} alt="Comprobante de pago" className="fv-comprobante-thumb" />
+                      <img src={comprobanteUrl(c.id_comprobante)} alt="Comprobante de pago" className="fv-comprobante-thumb" />
                     ) : (
                       <span className="fv-comprobante-file">
                         <Paperclip size={14} /> Comprobante.{c.tipo_archivo}
