@@ -128,6 +128,15 @@ class VentaController extends Controller
         ]));
     }
 
+    /**
+     * Actualiza campos generales de la venta y, opcionalmente, reemplaza
+     * por completo sus líneas de detalle (para añadir/quitar productos o
+     * cambiar cantidades). El reemplazo de 'detalles' solo se permite
+     * mientras la venta está 'pendiente': una vez pagada ya se descontó
+     * inventario y se generó factura sobre esas líneas, así que tocarlas
+     * después rompería esa trazabilidad (para eso existe cancelar/crear
+     * una venta nueva).
+     */
     public function update(UpdateVentaRequest $request, Venta $venta): JsonResponse
     {
         // Autorización de 'update' ya resuelta por authorizeResource().
@@ -135,7 +144,63 @@ class VentaController extends Controller
             return response()->json(['message' => 'No se puede editar una venta cancelada.'], 409);
         }
 
-        $venta->update($request->validated());
+        $datos = $request->validated();
+
+        if (array_key_exists('detalles', $datos) && $venta->estado !== 'pendiente') {
+            return response()->json([
+                'message' => 'Solo se pueden editar los productos de una venta pendiente.',
+            ], 409);
+        }
+
+        $detallesAnteriores = $venta->detalles->toArray();
+
+        $venta = DB::transaction(function () use ($venta, $datos) {
+            $venta->update(collect($datos)->except('detalles')->toArray());
+
+            if (array_key_exists('detalles', $datos)) {
+                // Reemplazo completo: se borran las líneas actuales y se
+                // recrean desde cero (mismo criterio que store()). No hace
+                // falta tocar inventario aquí: una venta pendiente todavía
+                // no descontó stock (eso solo pasa al llegar a 'pagado').
+                $venta->detalles()->delete();
+
+                $total = 0;
+
+                foreach ($datos['detalles'] as $linea) {
+                    $producto = Producto::findOrFail($linea['producto_id']);
+
+                    $precioVenta = $linea['precio_unitario_venta'] ?? $producto->precio_base;
+                    $hayAjuste = isset($linea['precio_unitario_venta'])
+                        && (float) $linea['precio_unitario_venta'] !== (float) $producto->precio_base;
+
+                    DetalleVenta::create([
+                        'venta_id'               => $venta->id_venta,
+                        'producto_id'            => $producto->id_producto,
+                        'cantidad'               => $linea['cantidad'],
+                        'precio_base_snapshot'   => $producto->precio_base,
+                        'precio_unitario_venta'  => $precioVenta,
+                        'ajuste_precio'          => $hayAjuste,
+                        'observacion_ajuste'     => $linea['observacion_ajuste'] ?? null,
+                    ]);
+
+                    $total += $linea['cantidad'] * $precioVenta;
+                }
+
+                $venta->update(['total' => $total]);
+            }
+
+            return $venta;
+        });
+
+        if (array_key_exists('detalles', $datos)) {
+            $this->registrarAuditoria(
+                'editar_detalles_venta',
+                'ventas',
+                $venta->id_venta,
+                ['detalles' => $detallesAnteriores],
+                ['detalles' => $datos['detalles'], 'total' => $venta->total]
+            );
+        }
 
         return response()->json($venta->load(['sucursal', 'cajero', 'metodoPago', 'detalles.producto']));
     }

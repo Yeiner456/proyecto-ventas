@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight, Loader2, Paperclip, ExternalLink } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError, comprobanteUrl } from "../services/apiClient";
@@ -152,7 +152,114 @@ function ConfirmDeleteModal({ venta, onCancel, onConfirm, deleting }) {
   );
 }
 
-function DetalleModal({ venta: ventaInicial, onClose }) {
+const TIPOS_COMPROBANTE_ACEPTADOS = ["image/jpeg", "image/png", "application/pdf"];
+const TAMANO_COMPROBANTE_MAXIMO = 5 * 1024 * 1024; // 5MB, igual que StoreComprobantePagoRequest
+
+/* ----------------------------------------------------------------------------
+ * AdjuntarComprobante — subir un comprobante de pago para una venta que
+ * sigue 'pendiente', desde el detalle en Ventas (no desde el flujo de
+ * cobro de NuevaVentaView). Pensado para admin_sucursal (ComprobantePagoPolicy
+ * ya permite admin_sucursal || cajero || admin_general; aquí solo se expone
+ * a admin_sucursal/admin_general porque es el caso que se pidió).
+ * -------------------------------------------------------------------------- */
+function AdjuntarComprobante({ ventaId, onSubido }) {
+  const [archivo, setArchivo] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [subiendo, setSubiendo] = useState(false);
+  const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
+
+  function elegirArchivo(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    if (!TIPOS_COMPROBANTE_ACEPTADOS.includes(file.type)) {
+      setError("Formato no permitido. Usa una imagen (JPG/PNG) o un PDF.");
+      return;
+    }
+    if (file.size > TAMANO_COMPROBANTE_MAXIMO) {
+      setError("El archivo pesa más de 5MB. Comprime la imagen e intenta de nuevo.");
+      return;
+    }
+
+    setError(null);
+    setArchivo(file);
+    setPreviewUrl(file.type === "application/pdf" ? null : URL.createObjectURL(file));
+  }
+
+  function quitarSeleccion() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setArchivo(null);
+    setPreviewUrl(null);
+    setError(null);
+  }
+
+  async function subir() {
+    if (!archivo) return;
+    setSubiendo(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("venta_id", ventaId);
+      formData.append("archivo", archivo);
+      const comprobante = await api.uploadFile("/comprobantes-pago", formData);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setArchivo(null);
+      setPreviewUrl(null);
+      onSubido(comprobante);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "No se pudo subir el comprobante.");
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  return (
+    <div className="vv-adjuntar-comprobante">
+      {!archivo ? (
+        <>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()}>
+            <Paperclip size={13} /> Adjuntar comprobante
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,application/pdf"
+            style={{ display: "none" }}
+            onChange={elegirArchivo}
+          />
+        </>
+      ) : (
+        <div className="vv-adjuntar-preview">
+          {previewUrl ? (
+            <img src={previewUrl} alt="Comprobante seleccionado" className="vv-comprobante-thumb" />
+          ) : (
+            <span className="vv-comprobante-file">
+              <Paperclip size={14} /> {archivo.name}
+            </span>
+          )}
+          <div className="vv-adjuntar-actions">
+            <button type="button" className="btn btn-outline btn-sm" onClick={quitarSeleccion} disabled={subiendo}>
+              Quitar
+            </button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={subir} disabled={subiendo}>
+              {subiendo ? "Subiendo..." : "Subir"}
+            </button>
+          </div>
+        </div>
+      )}
+      {error && (
+        <div className="alert alert-danger u-alert-xs">
+          <AlertTriangle size={14} className="u-icon-inline" />
+          <span>{error}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetalleModal({ venta: ventaInicial, actor, onClose }) {
   // La lista (GET /api/ventas) no trae 'comprobantes' — solo
   // VentaController::show() lo carga. Se pide fresco al abrir el modal,
   // igual que ya se hace en FacturasView para el método de pago.
@@ -265,6 +372,13 @@ function DetalleModal({ venta: ventaInicial, onClose }) {
               </a>
             ))}
           </div>
+        )}
+
+        {!cargando && venta.estado === "pendiente" && (actor.rol === "admin_sucursal" || actorEsAdminGeneral(actor)) && (
+          <AdjuntarComprobante
+            ventaId={venta.id_venta}
+            onSubido={(nuevo) => setVenta((prev) => ({ ...prev, comprobantes: [nuevo, ...(prev.comprobantes ?? [])] }))}
+          />
         )}
 
         <div className="modal-actions">
@@ -499,7 +613,7 @@ export default function VentasView() {
         </table>
       </div>
 
-      {detalleVenta && <DetalleModal venta={detalleVenta} onClose={() => setDetalleVenta(null)} />}
+      {detalleVenta && <DetalleModal venta={detalleVenta} actor={actor} onClose={() => setDetalleVenta(null)} />}
 
       {cancelarVenta && (
         <CancelarModal venta={cancelarVenta} procesando={procesando} onCancel={() => setCancelarVenta(null)} onConfirm={confirmarCancelacion} />

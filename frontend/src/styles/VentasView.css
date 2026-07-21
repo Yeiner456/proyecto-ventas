@@ -41,6 +41,11 @@
 .vv-comprobante-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
 .vv-comprobante-file { display: flex; align-items: center; gap: 6px; }
 
+/* Adjuntar comprobante a una venta pendiente (VentasView > DetalleModal) */
+.vv-adjuntar-comprobante { margin-bottom: 16px; }
+.vv-adjuntar-preview { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.vv-adjuntar-actions { display: flex; gap: 6px; }
+
 /* Celda de N° de venta en la tabla (ícono + texto mono) */
 .vv-numero-cell { display: flex; align-items: center; gap: 8px; }
 .vv-numero-icon { color: var(--sena-green-dark); }

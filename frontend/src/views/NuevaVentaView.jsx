@@ -26,19 +26,21 @@ import "../styles/NuevaVentaView.css";
  * tocado el stock — nunca queda una venta "pagada" sin comprobante ni con
  * inventario ya descontado por un error de red.
  *
- * "DEJAR PENDIENTE" / "REANUDAR" (a propósito, sin tocar detalles):
+ * "DEJAR PENDIENTE" / "REANUDAR":
  *   - El paso 1 de arriba YA deja la venta en 'pendiente' — "Dejar
  *     pendiente" solo hace ese POST y se detiene ahí, en vez de seguir
  *     directo al cobro. El carrito local se vacía porque sus líneas ya
  *     quedaron guardadas en el servidor.
  *   - "Reanudar" carga esa venta (con 'detalles.producto' ya anidado
- *     desde el índice) en modo de solo lectura: no se pueden agregar ni
- *     quitar productos desde aquí (VentaController::update() solo
- *     admite metodo_pago_id/observacion, no detalles — cambiar líneas de
- *     una venta ya creada no es un caso que cubra el backend). El cajero
- *     solo confirma/cambia el método de pago y sigue el mismo flujo de
- *     cobro de siempre (pasos 2-3), reusando el id_venta en vez de crear
- *     una nueva.
+ *     desde el índice) DENTRO del mismo carrito editable de siempre: el
+ *     catálogo sigue visible y se pueden agregar/quitar productos o
+ *     cambiar cantidades igual que en una venta nueva. VentaController::
+ *     update() ahora acepta un 'detalles' opcional que REEMPLAZA por
+ *     completo las líneas existentes (solo mientras la venta sigue
+ *     'pendiente' — el backend lo rechaza si ya cambió de estado). El
+ *     cajero puede "Guardar cambios" (PUT, sigue pendiente) o "Cobrar"
+ *     directo (PUT con las líneas actuales + sigue el flujo normal de
+ *     cobro, pasos 2-3), reusando el id_venta en vez de crear una nueva.
  *
  * VentaPolicy::create = admin_sucursal || cajero (admin_general entra por
  * before(), pero no tiene sucursal propia — no tendría sentido que operara
@@ -181,15 +183,37 @@ export default function NuevaVentaView() {
     if (autorizado) cargarPendientes();
   }, [autorizado, cargarPendientes]);
 
+  // Convierte los 'detalles' ya guardados de una venta pendiente al mismo
+  // formato que usa el carrito local, para poder editarlos con los
+  // mismos controles (agregar/quitar/cambiar cantidad/ajustar precio)
+  // que se usan al armar una venta nueva.
+  function detallesACarrito(detalles) {
+    return detalles.map((d) => ({
+      producto_id: d.producto_id,
+      nombre: d.producto?.nombre ?? "Producto",
+      precio_base: Number(d.precio_base_snapshot),
+      precio_unitario_venta: Number(d.precio_unitario_venta),
+      cantidad: d.cantidad,
+      maneja_stock: d.producto?.maneja_stock ?? false,
+      ajuste_precio: d.ajuste_precio,
+      observacion_ajuste: d.observacion_ajuste,
+    }));
+  }
+
   function iniciarReanudacion(venta) {
     setReanudando(venta);
+    setCart(detallesACarrito(venta.detalles));
     setMetodoPagoId(venta.metodo_pago_id ?? (metodosPago.find((m) => m.es_default)?.id_metodo_pago ?? ""));
     setObservacion(venta.observacion ?? "");
     setError(null);
   }
 
   function salirReanudacion() {
+    // "Volver sin cambios": descarta cualquier edición hecha al carrito
+    // (la venta en el servidor no se tocó, porque solo se guarda al
+    // hacer "Guardar cambios" o "Cobrar").
     setReanudando(null);
+    setCart([]);
     setObservacion("");
     setError(null);
     setMetodoPagoId((prev) => prev || metodosPago.find((m) => m.es_default)?.id_metodo_pago || "");
@@ -365,19 +389,45 @@ export default function NuevaVentaView() {
     cargarPendientes();
   }
 
+  async function guardarCambiosPendiente() {
+    // Guarda las líneas editadas del carrito (agregadas/quitadas/con
+    // cantidad o precio distinto) sin avanzar el cobro: la venta sigue
+    // 'pendiente' en el servidor, lista para reanudarse después.
+    if (!reanudando || cart.length === 0) return;
+    setError(null);
+    setCobrando(true);
+    try {
+      const venta = await api.put(`/ventas/${reanudando.id_venta}`, {
+        metodo_pago_id: metodoPagoId ? Number(metodoPagoId) : null,
+        observacion: observacion.trim() || null,
+        detalles: construirDetalles(),
+      });
+      setReanudando(null);
+      setCart([]);
+      setObservacion("");
+      setVentaPendienteGuardada(venta);
+      cargarPendientes();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudieron guardar los cambios. Intenta de nuevo.");
+    } finally {
+      setCobrando(false);
+    }
+  }
+
   async function cobrar() {
-    if (!reanudando && cart.length === 0) return;
+    if (cart.length === 0) return;
     if (!metodoPagoId) return;
     setError(null);
     setCobrando(true);
     try {
       // Paso 1: si se está reanudando, la venta ya existe (nació
-      // 'pendiente' cuando se guardó) — solo se confirma/actualiza el
-      // método de pago y la observación en vez de crear una nueva.
+      // 'pendiente' cuando se guardó) — se actualiza con las líneas del
+      // carrito (que pudieron editarse) en vez de crear una nueva.
       const venta = reanudando
         ? await api.put(`/ventas/${reanudando.id_venta}`, {
             metodo_pago_id: Number(metodoPagoId),
             observacion: observacion.trim() || null,
+            detalles: construirDetalles(),
           })
         : await api.post("/ventas", {
             metodo_pago_id: Number(metodoPagoId),
@@ -507,114 +557,81 @@ export default function NuevaVentaView() {
 
       <div className="nv-layout">
         <div>
-          {reanudando ? (
-            <div className="alert alert-info u-max-560">
+          {reanudando && (
+            <div className="alert alert-info u-max-560 u-mb-12">
               <Info size={16} className="u-icon-inline" />
               <span>
-                Reanudando la venta #{reanudando.id_venta}. Sus productos no se pueden editar desde aquí — solo
-                confirma el método de pago y termina el cobro. El catálogo vuelve cuando termines o la canceles.
+                Editando la venta pendiente #{reanudando.id_venta}. Agrega o quita productos tocando el catálogo o
+                el carrito de la derecha, y luego "Guarda los cambios" o cobra directo.
               </span>
             </div>
-          ) : (
-            <>
-              <div className="nv-search">
-                <Search size={16} />
-                <input className="field-input" placeholder="Buscar producto..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-              </div>
+          )}
 
-              <div className="nv-pills">
-                <button className={`nv-pill${categoriaActiva === "todos" ? " active" : ""}`} onClick={() => setCategoriaActiva("todos")}>
-                  Todos
-                </button>
-                {categorias.map((c) => (
-                  <button
-                    key={c.id_categoria}
-                    className={`nv-pill${categoriaActiva === c.id_categoria ? " active" : ""}`}
-                    onClick={() => setCategoriaActiva(c.id_categoria)}
-                  >
-                    {c.nombre}
+          <div className="nv-search">
+            <Search size={16} />
+            <input className="field-input" placeholder="Buscar producto..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+          </div>
+
+          <div className="nv-pills">
+            <button className={`nv-pill${categoriaActiva === "todos" ? " active" : ""}`} onClick={() => setCategoriaActiva("todos")}>
+              Todos
+            </button>
+            {categorias.map((c) => (
+              <button
+                key={c.id_categoria}
+                className={`nv-pill${categoriaActiva === c.id_categoria ? " active" : ""}`}
+                onClick={() => setCategoriaActiva(c.id_categoria)}
+              >
+                {c.nombre}
+              </button>
+            ))}
+          </div>
+
+          <div className="nv-grid">
+            {cargando ? (
+              <div className="u-loading-row">
+                <Loader2 size={18} className="u-spin" /> Cargando catálogo...
+              </div>
+            ) : errorCarga ? (
+              <div className="alert alert-danger u-max-480">
+                <AlertTriangle size={16} className="u-icon-inline" />
+                <span>{errorCarga}</span>
+              </div>
+            ) : (
+              productosFiltrados.map((p) => {
+                const disponible = stockDisponible(p);
+                const sinStock = p.maneja_stock && disponible <= 0;
+                return (
+                  <button key={p.id_producto} className="nv-card" disabled={sinStock} onClick={() => agregarAlCarrito(p)}>
+                    <ImagenProducto producto={p} width="100%" height={72} className="nv-card-img" />
+                    <span className="nv-card-cat">{p.categoria?.nombre ?? "Sin categoría"}</span>
+                    <span className="nv-card-name">{p.nombre}</span>
+                    <span className="nv-card-price">{formatMoney(p.precio_base)}</span>
+                    {p.maneja_stock && (
+                      <span className={`nv-card-stock${disponible <= p.stock_minimo ? " low" : ""}`}>
+                        {sinStock ? "Sin stock" : `Stock: ${disponible}`}
+                      </span>
+                    )}
                   </button>
-                ))}
-              </div>
-
-              <div className="nv-grid">
-                {cargando ? (
-                  <div className="u-loading-row">
-                    <Loader2 size={18} className="u-spin" /> Cargando catálogo...
-                  </div>
-                ) : errorCarga ? (
-                  <div className="alert alert-danger u-max-480">
-                    <AlertTriangle size={16} className="u-icon-inline" />
-                    <span>{errorCarga}</span>
-                  </div>
-                ) : (
-                  productosFiltrados.map((p) => {
-                  const disponible = stockDisponible(p);
-                  const sinStock = p.maneja_stock && disponible <= 0;
-                  return (
-                    <button key={p.id_producto} className="nv-card" disabled={sinStock} onClick={() => agregarAlCarrito(p)}>
-                      <ImagenProducto producto={p} width="100%" height={72} className="nv-card-img" />
-                      <span className="nv-card-cat">{p.categoria?.nombre ?? "Sin categoría"}</span>
-                      <span className="nv-card-name">{p.nombre}</span>
-                  <span className="nv-card-price">{formatMoney(p.precio_base)}</span>
-                  {p.maneja_stock && (
-                    <span className={`nv-card-stock${disponible <= p.stock_minimo ? " low" : ""}`}>
-                      {sinStock ? "Sin stock" : `Stock: ${disponible}`}
-                    </span>
-                  )}
-                </button>
-              );
+                );
               })
             )}
           </div>
-            </>
-          )}
         </div>
 
         <div className="nv-cart">
-          {reanudando ? (
-            <>
-              <h3 className="nv-cart-title">Venta pendiente #{reanudando.id_venta}</h3>
-              {reanudando.detalles.map((d) => (
-                <div className="nv-cart-item" key={d.id_detalle_venta}>
-                  <div className="nv-cart-item-top">
-                    <div className="u-flex-gap-8">
-                      <ImagenProducto producto={d.producto} width={36} height={36} iconSize={16} />
-                      <div>
-                        <div className="nv-cart-item-name">{d.producto?.nombre ?? "Producto"}</div>
-                        <div className="nv-cart-item-price">
-                          {formatMoney(d.precio_unitario_venta)} × {d.cantidad}
-                        </div>
-                        {d.ajuste_precio && (
-                          <div className="nv-cart-adjust-note">
-                            Precio ajustado {d.observacion_ajuste ? `— ${d.observacion_ajuste}` : ""}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+          <h3 className="nv-cart-title">
+            {reanudando ? `Editando venta #${reanudando.id_venta} (${cart.length})` : `Orden actual (${cart.length})`}
+          </h3>
 
-              <div className="nv-totals">
-                <div className="nv-total-row grand">
-                  <span>Total</span>
-                  <span className="text-mono">{formatMoney(reanudando.total)}</span>
-                </div>
-              </div>
-            </>
+          {cart.length === 0 ? (
+            <div className="nv-cart-empty">Agrega productos tocando una tarjeta.</div>
           ) : (
-            <>
-              <h3 className="nv-cart-title">Orden actual ({cart.length})</h3>
-
-              {cart.length === 0 ? (
-                <div className="nv-cart-empty">Agrega productos tocando una tarjeta.</div>
-              ) : (
-                cart.map((item) => (
-                  <div className="nv-cart-item" key={item.producto_id}>
-                    <div className="nv-cart-item-top">
-                      <div>
-                        <div className="nv-cart-item-name">{item.nombre}</div>
+            cart.map((item) => (
+              <div className="nv-cart-item" key={item.producto_id}>
+                <div className="nv-cart-item-top">
+                  <div>
+                    <div className="nv-cart-item-name">{item.nombre}</div>
                     <div className="nv-cart-item-price">{formatMoney(item.precio_unitario_venta)}</div>
                     {item.ajuste_precio && (
                       <div className="nv-cart-adjust-note">
@@ -660,8 +677,6 @@ export default function NuevaVentaView() {
               <span className="text-mono">{formatMoney(total)}</span>
             </div>
           </div>
-            </>
-          )}
 
           <div className="nv-metodos">
             {metodosPago.filter((m) => m.activo).map((m) => (
@@ -698,13 +713,21 @@ export default function NuevaVentaView() {
 
           <button
             className="btn btn-primary u-btn-block-mb"
-            disabled={(!reanudando && cart.length === 0) || !metodoPagoId || cobrando}
+            disabled={cart.length === 0 || !metodoPagoId || cobrando}
             onClick={cobrar}
           >
-            {cobrando ? "Procesando..." : `Cobrar ${formatMoney(reanudando ? reanudando.total : total)}`}
+            {cobrando ? "Procesando..." : `Cobrar ${formatMoney(total)}`}
           </button>
 
-          {!reanudando && (
+          {reanudando ? (
+            <button
+              className="btn btn-outline u-btn-block-mb"
+              disabled={cart.length === 0 || cobrando}
+              onClick={guardarCambiosPendiente}
+            >
+              <Clock size={14} /> Guardar cambios (sigue pendiente)
+            </button>
+          ) : (
             <button
               className="btn btn-outline u-btn-block-mb"
               disabled={cart.length === 0 || cobrando}
