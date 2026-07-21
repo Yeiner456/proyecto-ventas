@@ -20,6 +20,10 @@ class StoreProductoRequest extends FormRequest
             'descripcion'   => ['nullable', 'string'],
             'precio_base'   => ['required', 'numeric', 'min:0'],
             'imagen_ruta'   => ['nullable', 'string', 'max:500'],
+            // Archivo real subido desde el formulario (multipart/form-data).
+            // 'imagen_ruta' se mantiene por si algún día se necesita mandar
+            // una ruta ya existente a mano, pero el flujo normal es este.
+            'imagen'        => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'maneja_stock'  => ['sometimes', 'boolean'],
             'stock_minimo'  => ['sometimes', 'integer', 'min:0'],
             'activo'        => ['sometimes', 'boolean'],

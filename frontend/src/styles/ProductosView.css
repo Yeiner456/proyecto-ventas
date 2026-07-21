@@ -26,5 +26,12 @@
 .pv-nombre-cell { display: flex; align-items: center; gap: 8px; }
 .pv-nombre-icon { color: var(--sena-green-dark); }
 
+/* Campo de imagen en el formulario de crear/editar producto */
+.pv-imagen-field { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+.pv-imagen-preview { width: 72px; height: 72px; border-radius: 8px; object-fit: cover; background: var(--bg); flex-shrink: 0; }
+.pv-imagen-controls { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.pv-imagen-upload-btn { position: relative; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.pv-imagen-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+
 /* Fila de acciones (editar / eliminar) */
 .pv-actions-cell { display: flex; gap: 6px; }

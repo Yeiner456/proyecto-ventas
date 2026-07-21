@@ -25,6 +25,17 @@ export function comprobanteUrl(id_comprobante) {
   return `${BASE_URL}/api/comprobantes-pago/${id_comprobante}/archivo`;
 }
 
+/**
+ * URL para ver la imagen de un producto. Mismo motivo que comprobanteUrl():
+ * apunta al endpoint público ProductoController::mostrarImagen en vez del
+ * symlink de `storage:link`. Quien la use debe primero chequear
+ * producto.imagen_ruta (si es null, el producto no tiene imagen y esta
+ * URL daría 404).
+ */
+export function productoImagenUrl(id_producto) {
+  return `${BASE_URL}/api/productos/${id_producto}/imagen`;
+}
+
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }

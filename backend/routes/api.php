@@ -27,6 +27,11 @@ Route::middleware('throttle:6,1')->post('login', [AuthController::class, 'login'
 // grupo auth:sanctum a propósito. ---
 Route::get('comprobantes-pago/{comprobante}/archivo', [ComprobantePagoController::class, 'mostrarArchivo']);
 
+// --- Pública: servir la imagen de un producto (ver comentario en
+// ProductoController::mostrarImagen) — el POS del cajero pinta esta URL
+// en un <img src=""> plano, así que tampoco puede llevar Authorization. ---
+Route::get('productos/{producto}/imagen', [ProductoController::class, 'mostrarImagen']);
+
 // --- Protegidas: requieren token válido ---
 Route::middleware('auth:sanctum')->group(function () {
 

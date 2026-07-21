@@ -3,6 +3,7 @@ import { Search, Plus, Minus, Trash2, X, AlertTriangle, Info, Pencil, CheckCircl
 import { useAuth } from "../context/AuthContext";
 import { api, ApiError } from "../services/apiClient";
 import ComprobanteModal from "../components/ComprobanteModal";
+import ImagenProducto from "../components/ImagenProducto";
 import "../styles/NuevaVentaView.css";
 
 /* ============================================================================
@@ -552,6 +553,7 @@ export default function NuevaVentaView() {
                   const sinStock = p.maneja_stock && disponible <= 0;
                   return (
                     <button key={p.id_producto} className="nv-card" disabled={sinStock} onClick={() => agregarAlCarrito(p)}>
+                      <ImagenProducto producto={p} width="100%" height={72} className="nv-card-img" />
                       <span className="nv-card-cat">{p.categoria?.nombre ?? "Sin categoría"}</span>
                       <span className="nv-card-name">{p.nombre}</span>
                   <span className="nv-card-price">{formatMoney(p.precio_base)}</span>
@@ -576,16 +578,19 @@ export default function NuevaVentaView() {
               {reanudando.detalles.map((d) => (
                 <div className="nv-cart-item" key={d.id_detalle_venta}>
                   <div className="nv-cart-item-top">
-                    <div>
-                      <div className="nv-cart-item-name">{d.producto?.nombre ?? "Producto"}</div>
-                      <div className="nv-cart-item-price">
-                        {formatMoney(d.precio_unitario_venta)} × {d.cantidad}
-                      </div>
-                      {d.ajuste_precio && (
-                        <div className="nv-cart-adjust-note">
-                          Precio ajustado {d.observacion_ajuste ? `— ${d.observacion_ajuste}` : ""}
+                    <div className="u-flex-gap-8">
+                      <ImagenProducto producto={d.producto} width={36} height={36} iconSize={16} />
+                      <div>
+                        <div className="nv-cart-item-name">{d.producto?.nombre ?? "Producto"}</div>
+                        <div className="nv-cart-item-price">
+                          {formatMoney(d.precio_unitario_venta)} × {d.cantidad}
                         </div>
-                      )}
+                        {d.ajuste_precio && (
+                          <div className="nv-cart-adjust-note">
+                            Precio ajustado {d.observacion_ajuste ? `— ${d.observacion_ajuste}` : ""}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

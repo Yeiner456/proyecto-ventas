@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Package, Plus, Pencil, Trash2, X, Search, AlertTriangle, Info, Lock, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Search, AlertTriangle, Info, Lock, Loader2, ImagePlus } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError } from "../services/apiClient";
+import ImagenProducto from "../components/ImagenProducto";
 import "../styles/ProductosView.css";
 
 /* ============================================================================
@@ -56,6 +57,34 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
   const [activo, setActivo] = useState(initial?.activo ?? true);
   const [touched, setTouched] = useState(false);
 
+  // Imagen: 'imagenFile' es el archivo nuevo elegido (aún no subido);
+  // 'imagenPreview' es su URL local para pintar la vista previa sin
+  // esperar al servidor; 'quitarImagen' señala "borrar la foto actual"
+  // cuando se edita un producto que ya tenía una y no se elige una nueva.
+  const [imagenFile, setImagenFile] = useState(null);
+  const [quitarImagen, setQuitarImagen] = useState(false);
+
+  const imagenPreview = useMemo(() => (imagenFile ? URL.createObjectURL(imagenFile) : null), [imagenFile]);
+
+  useEffect(() => {
+    // Libera el object URL cuando se elige otro archivo o se cierra el
+    // modal — si no, cada selección nueva deja el anterior vivo en memoria.
+    return () => {
+      if (imagenPreview) URL.revokeObjectURL(imagenPreview);
+    };
+  }, [imagenPreview]);
+
+  function handleImagenChange(e) {
+    const file = e.target.files?.[0] ?? null;
+    setImagenFile(file);
+    if (file) setQuitarImagen(false);
+  }
+
+  function handleQuitarImagen() {
+    setImagenFile(null);
+    setQuitarImagen(true);
+  }
+
   const categoriasDisponibles = sucursalId ? categorias.filter((c) => c.sucursal_id === Number(sucursalId)) : [];
 
   const nombreValido = nombre.trim().length >= 2;
@@ -91,7 +120,7 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
       activo,
     };
     if (!isEdit && manejaStock) payload.stock_inicial = Number(stockInicial);
-    onSubmit(payload);
+    onSubmit(payload, { imagenFile, quitarImagen });
   }
 
   return (
@@ -102,6 +131,32 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
           <button type="button" className="modal-close" onClick={onCancel}>
             <X size={18} />
           </button>
+        </div>
+
+        <div className="pv-imagen-field">
+          {imagenPreview ? (
+            <img src={imagenPreview} alt="Vista previa" className="pv-imagen-preview" />
+          ) : (
+            <ImagenProducto
+              producto={quitarImagen ? { imagen_ruta: null } : initial ?? { imagen_ruta: null }}
+              width={72}
+              height={72}
+              className="pv-imagen-preview"
+            />
+          )}
+          <div className="pv-imagen-controls">
+            <label className="btn btn-outline btn-sm pv-imagen-upload-btn">
+              <ImagePlus size={14} />
+              {initial?.imagen_ruta || imagenFile ? "Cambiar imagen" : "Subir imagen"}
+              <input type="file" accept="image/jpeg,image/png,image/webp" className="pv-imagen-input" onChange={handleImagenChange} />
+            </label>
+            {(initial?.imagen_ruta || imagenFile) && !quitarImagen && (
+              <button type="button" className="btn btn-danger-ghost btn-sm" onClick={handleQuitarImagen}>
+                Quitar imagen
+              </button>
+            )}
+            <p className="field-help">JPG, PNG o WEBP. Máximo 2MB.</p>
+          </div>
         </div>
 
         <div className="pv-form-grid-2fr1fr">
@@ -327,16 +382,43 @@ export default function ProductosView() {
     setTimeout(() => setToast(null), 3000);
   }
 
-  async function handleSubmit(payload) {
+  async function handleSubmit(payload, { imagenFile, quitarImagen } = {}) {
     setSaving(true);
     try {
-      if (formModal.mode === "edit") {
+      if (imagenFile || quitarImagen) {
+        // FormData en vez de JSON porque hay que mandar el archivo real.
+        // Los valores null (ej. categoria_id sin elegir) se mandan como
+        // "" — el middleware global de Laravel los convierte de vuelta a
+        // null antes de llegar a la validación, igual que si hubieran
+        // venido en un body JSON normal.
+        const formData = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value === null || value === undefined) {
+            formData.append(key, "");
+          } else if (typeof value === "boolean") {
+            formData.append(key, value ? "1" : "0");
+          } else {
+            formData.append(key, value);
+          }
+        });
+        if (imagenFile) formData.append("imagen", imagenFile);
+        if (quitarImagen && !imagenFile) formData.append("eliminar_imagen", "1");
+
+        if (formModal.mode === "edit") {
+          // Laravel no parsea multipart en verbos PUT reales, así que se
+          // manda por POST con el spoof estándar de _method (igual que
+          // cualquier <form method="POST"><input name="_method" value="PUT">).
+          formData.append("_method", "PUT");
+          await api.uploadFile(`/productos/${formModal.producto.id_producto}`, formData);
+        } else {
+          await api.uploadFile("/productos", formData);
+        }
+      } else if (formModal.mode === "edit") {
         await api.put(`/productos/${formModal.producto.id_producto}`, payload);
-        showToast("Producto actualizado.");
       } else {
         await api.post("/productos", payload);
-        showToast("Producto creado.");
       }
+      showToast(formModal.mode === "edit" ? "Producto actualizado." : "Producto creado.");
       await cargarDatos();
       setFormModal(null);
     } catch (e) {
@@ -467,7 +549,7 @@ export default function ProductosView() {
                   <tr key={p.id_producto}>
                     <td>
                       <div className="pv-checkbox-row">
-                        <Package size={14} className="pv-nombre-icon" />
+                        <ImagenProducto producto={p} width={28} height={28} iconSize={14} />
                         {p.nombre}
                       </div>
                     </td>
