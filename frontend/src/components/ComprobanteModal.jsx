@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Camera, Paperclip, RotateCcw, AlertTriangle, Loader2, CheckCircle2, X } from "lucide-react";
+import { Camera, Paperclip, RotateCcw, AlertTriangle, Loader2, CheckCircle2, X, Clock } from "lucide-react";
 
 /* ============================================================================
  * ComprobanteModal — paso final del cobro para métodos de pago que exigen
@@ -13,12 +13,21 @@ import { Camera, Paperclip, RotateCcw, AlertTriangle, Loader2, CheckCircle2, X }
  * el padre orquesta las llamadas de red y pasa `subiendo`/`error` como props.
  *
  * Backend acepta jpg, jpeg, png o pdf, máx. 5MB (StoreComprobantePagoRequest).
+ *
+ * Salir de aquí sin terminar tiene DOS caminos distintos, a propósito:
+ *   - "Dejar pendiente" (y la X / click afuera, que son lo mismo): la
+ *     venta ya nació 'pendiente' en el paso 1 del cobro, así que esto no
+ *     llama a la API — solo cierra el modal y el cajero la retoma después
+ *     desde "Ventas pendientes".
+ *   - "Cancelar venta": de verdad anula la venta (PATCH estado=cancelado).
+ *     Antes esta era la ÚNICA salida (hasta la X cancelaba) — ahora es la
+ *     opción explícita para cuando el cajero de verdad no va a completarla.
  * ==========================================================================*/
 
 const TIPOS_ACEPTADOS = ["image/jpeg", "image/png", "application/pdf"];
 const TAMANO_MAXIMO = 5 * 1024 * 1024; // 5MB, igual que el backend
 
-export default function ComprobanteModal({ ventaId, subiendo, error, onConfirmar, onCancelar }) {
+export default function ComprobanteModal({ ventaId, subiendo, error, onConfirmar, onDejarPendiente, onCancelar }) {
     const [modo, setModo] = useState("elegir"); // elegir | camara | previsualizar
     const [archivo, setArchivo] = useState(null);
     const [previewUrl, setPreviewUrl] = useState(null);
@@ -108,6 +117,12 @@ export default function ComprobanteModal({ ventaId, subiendo, error, onConfirmar
     }
 
     function cerrar() {
+        detenerCamara();
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        onDejarPendiente();
+    }
+
+    function cancelarVenta() {
         detenerCamara();
         if (previewUrl) URL.revokeObjectURL(previewUrl);
         onCancelar();
@@ -204,7 +219,10 @@ export default function ComprobanteModal({ ventaId, subiendo, error, onConfirmar
                     </div>
                 )}
 
-                <button className="btn btn-danger-ghost u-btn-block cm-cancelar-venta" onClick={cerrar} disabled={subiendo}>
+                <button className="btn btn-outline u-btn-block cm-dejar-pendiente" onClick={cerrar} disabled={subiendo}>
+                    <Clock size={14} /> Dejar pendiente
+                </button>
+                <button className="btn btn-danger-ghost u-btn-block cm-cancelar-venta" onClick={cancelarVenta} disabled={subiendo}>
                     Cancelar venta
                 </button>
             </div>

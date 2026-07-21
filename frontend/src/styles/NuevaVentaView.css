@@ -2,6 +2,56 @@
  * NuevaVentaView.css
  * ==========================================================================*/
 
+.nv-pendientes-panel {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+}
+
+.nv-pendientes-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: "Roboto", sans-serif;
+    font-weight: 500;
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.nv-pendientes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.nv-pendiente-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.nv-pendiente-num {
+    display: block;
+    font-family: "Roboto", sans-serif;
+    font-weight: 500;
+    font-size: 13.5px;
+}
+
+.nv-pendiente-detalle {
+    display: block;
+    font-family: "Roboto Mono", monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
 .nv-layout {
     display: grid;
     grid-template-columns: 1fr 340px;
@@ -346,6 +396,10 @@
     margin-top: 12px;
 }
 
-.cm-cancelar-venta {
+.cm-dejar-pendiente {
     margin-top: 16px;
+}
+
+.cm-cancelar-venta {
+    margin-top: 8px;
 }
