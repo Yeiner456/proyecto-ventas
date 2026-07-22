@@ -111,13 +111,6 @@ export default function LoginView() {
             {enviando ? "Ingresando..." : "Iniciar sesión"}
           </button>
         </form>
-
-        <div className="login-help">
-          Inicia sesión con el <strong>ID numérico</strong> del usuario, no con un
-          nombre o correo. Si no lo recuerdas, consúltalo con{" "}
-          <code>SELECT id_usuario, nombre FROM usuarios</code> o pídelo a un
-          administrador.
-        </div>
       </div>
     </div>
   );
