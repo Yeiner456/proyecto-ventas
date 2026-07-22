@@ -111,6 +111,10 @@ export default function LoginView() {
             {enviando ? "Ingresando..." : "Iniciar sesión"}
           </button>
         </form>
+
+        <div className="login-help">
+          <p>Si olvidaste la contraseña o el ID, consulta el manual de instalacion o consultalo con un adminstrador.</p>
+        </div>
       </div>
     </div>
   );
