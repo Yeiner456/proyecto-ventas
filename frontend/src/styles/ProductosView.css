@@ -10,6 +10,7 @@
 .pv-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
 .pv-search input { padding-left: 36px; }
 .pv-select { max-width: 190px; }
+.pv-precio { max-width: 120px; }
 .pv-stock-low { color: var(--danger); font-weight: 500; }
 
 /* Grids del formulario (nombre+precio, sucursal+categoría, stock mínimo+inicial) */

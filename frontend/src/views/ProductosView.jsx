@@ -40,6 +40,19 @@ function productoVisible(actor, producto, sucursales) {
   return producto.sucursal_id === sucursalActorId;
 }
 
+// Estado de stock de un producto, usado por el filtro de stock del listado.
+// "no_aplica": el producto no maneja stock (maneja_stock=false).
+// "sin_stock": maneja stock y la cantidad es 0 (o negativa).
+// "bajo": maneja stock, hay cantidad pero está por debajo de stock_minimo.
+// "disponible": maneja stock y la cantidad cubre el mínimo.
+function stockEstado(producto) {
+  if (!producto.maneja_stock) return "no_aplica";
+  const stock = producto.inventario?.cantidad ?? 0;
+  if (stock <= 0) return "sin_stock";
+  if (stock < producto.stock_minimo) return "bajo";
+  return "disponible";
+}
+
 
 function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existentes, stockInicialActual, sucursales, categorias }) {
   const isEdit = Boolean(initial);
@@ -338,6 +351,10 @@ export default function ProductosView() {
   const [toast, setToast] = useState(null);
   const [busqueda, setBusqueda] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("");
+  const [filtroSucursal, setFiltroSucursal] = useState("");
+  const [precioMin, setPrecioMin] = useState("");
+  const [precioMax, setPrecioMax] = useState("");
+  const [filtroStock, setFiltroStock] = useState("");
 
   const autorizado = puedeGestionar(actor);
 
@@ -368,8 +385,12 @@ export default function ProductosView() {
     return productos
       .filter((p) => productoVisible(actor, p, sucursales))
       .filter((p) => !filtroCategoria || p.categoria_id === Number(filtroCategoria))
+      .filter((p) => !filtroSucursal || p.sucursal_id === Number(filtroSucursal))
+      .filter((p) => !precioMin || Number(p.precio_base) >= Number(precioMin))
+      .filter((p) => !precioMax || Number(p.precio_base) <= Number(precioMax))
+      .filter((p) => !filtroStock || stockEstado(p) === filtroStock)
       .filter((p) => !busqueda.trim() || p.nombre.toLowerCase().includes(busqueda.toLowerCase()));
-  }, [productos, actor, sucursales, filtroCategoria, busqueda]);
+  }, [productos, actor, sucursales, filtroCategoria, filtroSucursal, precioMin, precioMax, filtroStock, busqueda]);
 
   const stats = useMemo(() => {
     const base = productos.filter((p) => productoVisible(actor, p, sucursales));
@@ -503,6 +524,41 @@ export default function ProductosView() {
               {c.nombre}
             </option>
           ))}
+        </select>
+        {actorEsAdminGeneral(actor) && (
+          <select className="field-select pv-select" value={filtroSucursal} onChange={(e) => setFiltroSucursal(e.target.value)}>
+            <option value="">Todas las sucursales</option>
+            {sucursales.map((s) => (
+              <option key={s.id_sucursal} value={s.id_sucursal}>
+                {s.nombre}
+              </option>
+            ))}
+          </select>
+        )}
+        <input
+          className="field-input pv-precio"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Precio mín"
+          value={precioMin}
+          onChange={(e) => setPrecioMin(e.target.value)}
+        />
+        <input
+          className="field-input pv-precio"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Precio máx"
+          value={precioMax}
+          onChange={(e) => setPrecioMax(e.target.value)}
+        />
+        <select className="field-select pv-select" value={filtroStock} onChange={(e) => setFiltroStock(e.target.value)}>
+          <option value="">Todo el stock</option>
+          <option value="disponible">Disponible</option>
+          <option value="bajo">Stock bajo</option>
+          <option value="sin_stock">Sin stock</option>
+          <option value="no_aplica">No maneja stock</option>
         </select>
       </div>
 
