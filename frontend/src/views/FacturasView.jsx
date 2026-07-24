@@ -215,6 +215,8 @@ export default function FacturasView() {
   const [busqueda, setBusqueda] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
+  const [cajeroFiltro, setCajeroFiltro] = useState(""); // ← NUEVO
+  const [sucursalFiltro, setSucursalFiltro] = useState(""); // ← NUEVO
   const [seleccionada, setSeleccionada] = useState(null);
 
   const cargarDatos = useCallback(async () => {
@@ -238,14 +240,31 @@ export default function FacturasView() {
     cargarDatos();
   }, [cargarDatos]);
 
+  // ← NUEVO: opciones del selector de cajero, calculadas a partir de las
+  // facturas que ese actor puede ver (así el admin de sucursal solo ve
+  // los cajeros de su propia sucursal, y el admin_general los ve todos).
+  const cajeroOptions = useMemo(() => {
+    const map = new Map();
+    facturas
+      .filter((f) => facturaVisible(actor, f, sucursales))
+      .forEach((f) => {
+        if (f.cajero?.id_usuario) map.set(f.cajero.id_usuario, f.cajero.nombre);
+      });
+    return Array.from(map, ([id_usuario, nombre]) => ({ id_usuario, nombre })).sort((a, b) =>
+      a.nombre.localeCompare(b.nombre)
+    );
+  }, [facturas, actor, sucursales]);
+
   const visibles = useMemo(() => {
     return facturas
       .filter((f) => facturaVisible(actor, f, sucursales))
       .filter((f) => !busqueda.trim() || f.numero_factura.toLowerCase().includes(busqueda.toLowerCase()))
       .filter((f) => !desde || f.created_at.slice(0, 10) >= desde)
       .filter((f) => !hasta || f.created_at.slice(0, 10) <= hasta)
+      .filter((f) => !cajeroFiltro || String(f.cajero_id) === cajeroFiltro) // ← NUEVO
+      .filter((f) => !sucursalFiltro || String(f.sucursal_id) === sucursalFiltro) // ← NUEVO
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [facturas, actor, sucursales, busqueda, desde, hasta]);
+  }, [facturas, actor, sucursales, busqueda, desde, hasta, cajeroFiltro, sucursalFiltro]); // ← NUEVO (2 deps agregadas)
 
   const stats = useMemo(() => {
     const base = facturas.filter((f) => facturaVisible(actor, f, sucursales));
@@ -299,6 +318,38 @@ export default function FacturasView() {
         </div>
         <input className="field-input fv-date" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} title="Desde" />
         <input className="field-input fv-date" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} title="Hasta" />
+
+        {/* ← NUEVO: selector de cajero */}
+        <select
+          className="field-input fv-select"
+          value={cajeroFiltro}
+          onChange={(e) => setCajeroFiltro(e.target.value)}
+          title="Cajero"
+        >
+          <option value="">Todos los cajeros</option>
+          {cajeroOptions.map((c) => (
+            <option key={c.id_usuario} value={c.id_usuario}>
+              {c.nombre}
+            </option>
+          ))}
+        </select>
+
+        {/* ← NUEVO: selector de sucursal (solo para admin_general) */}
+        {actorEsAdminGeneral(actor) && (
+          <select
+            className="field-input fv-select"
+            value={sucursalFiltro}
+            onChange={(e) => setSucursalFiltro(e.target.value)}
+            title="Sucursal"
+          >
+            <option value="">Todas las sucursales</option>
+            {sucursales.map((s) => (
+              <option key={s.id_sucursal} value={s.id_sucursal}>
+                {s.nombre}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="data-table-card">

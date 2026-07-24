@@ -10,6 +10,7 @@
 .fv-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
 .fv-search input { padding-left: 36px; }
 .fv-date { max-width: 170px; }
+.fv-select { max-width: 190px; }  /* ← NUEVO */
 .fv-detalle-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-family: 'Roboto', sans-serif; font-size: 13px; }
 .fv-detalle-row:last-child { border-bottom: none; }
 .fv-total-row { display: flex; justify-content: space-between; padding-top: 10px; margin-top: 4px; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; }
