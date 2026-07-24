@@ -36,3 +36,18 @@
 
 /* Fila de acciones (editar / eliminar) */
 .pv-actions-cell { display: flex; gap: 6px; }
+
+/* Toggle destacado "Crear para todas las sucursales" — se pone como una
+   tarjeta con borde e ícono, no un checkbox chiquito, para que no se pierda
+   entre el resto del formulario (fue justo lo que pasó la primera vez). */
+.pv-todas-toggle {
+  display: flex; align-items: flex-start; gap: 12px;
+  border: 1.5px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; margin-bottom: 16px;
+  cursor: pointer; transition: border-color .15s ease, background .15s ease;
+}
+.pv-todas-toggle:hover { border-color: var(--sena-green); }
+.pv-todas-toggle.is-activo { border-color: var(--sena-green); background: var(--green-soft); }
+.pv-todas-toggle-input { width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; accent-color: var(--sena-green); cursor: pointer; }
+.pv-todas-toggle-title { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 700; font-size: 14.5px; color: var(--ink); }
+.pv-todas-toggle-help { font-family: var(--font-body); font-size: 12.5px; color: var(--text-secondary); margin: 4px 0 0; line-height: 1.45; }

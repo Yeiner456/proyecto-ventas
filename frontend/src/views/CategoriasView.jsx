@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Tags, Plus, Pencil, Trash2, X, AlertTriangle, Info, Lock, Loader2 } from "lucide-react";
+import { Tags, Plus, Pencil, Trash2, X, AlertTriangle, Info, Lock, Loader2, Store } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError } from "../services/apiClient";
 import "../styles/CategoriasView.css";
@@ -43,23 +43,35 @@ function FormModal({ actor, initial, onCancel, onSubmit, saving, existentes, suc
 
   const [nombre, setNombre] = useState(initial?.nombre ?? "");
   const [sucursalId, setSucursalId] = useState(initial ? initial.sucursal_id : admin ? "" : sucursalActorId);
+  const [crearTodas, setCrearTodas] = useState(false);
   const [touched, setTouched] = useState(false);
+
+  function handleCrearTodasChange(checked) {
+    setCrearTodas(checked);
+    if (checked) setSucursalId("");
+  }
 
   const nombreValido = nombre.trim().length >= 2;
   const sucursalValida = Boolean(sucursalId);
-  const duplicada = existentes.some(
-    (c) =>
-      c.nombre.toLowerCase() === nombre.trim().toLowerCase() &&
-      c.sucursal_id === Number(sucursalId) &&
-      c.id_categoria !== initial?.id_categoria
-  );
-  const formValido = nombreValido && sucursalValida && !duplicada;
+  const duplicada =
+    !crearTodas &&
+    existentes.some(
+      (c) =>
+        c.nombre.toLowerCase() === nombre.trim().toLowerCase() &&
+        c.sucursal_id === Number(sucursalId) &&
+        c.id_categoria !== initial?.id_categoria
+    );
+  const formValido = nombreValido && (crearTodas || (sucursalValida && !duplicada));
 
   function handleSubmit(e) {
     e.preventDefault();
     setTouched(true);
     if (!formValido) return;
-    onSubmit({ nombre: nombre.trim(), sucursal_id: Number(sucursalId) });
+    if (crearTodas) {
+      onSubmit({ nombre: nombre.trim(), crear_para_todas: true });
+    } else {
+      onSubmit({ nombre: nombre.trim(), sucursal_id: Number(sucursalId) });
+    }
   }
 
   return (
@@ -81,9 +93,34 @@ function FormModal({ actor, initial, onCancel, onSubmit, saving, existentes, suc
           )}
         </div>
 
+        {!isEdit && admin && (
+          <label className={`cv-todas-toggle${crearTodas ? " is-activo" : ""}`}>
+            <input
+              type="checkbox"
+              className="cv-todas-toggle-input"
+              checked={crearTodas}
+              onChange={(e) => handleCrearTodasChange(e.target.checked)}
+            />
+            <div>
+              <span className="cv-todas-toggle-title">
+                <Store size={18} />
+                Crear para todas las sucursales
+              </span>
+              <p className="cv-todas-toggle-help">
+                Se creará una categoría con este nombre en cada sucursal existente. Se omite en las sucursales donde
+                ya exista una con el mismo nombre.
+              </p>
+            </div>
+          </label>
+        )}
+
         <div className="field">
           <label className="field-label">Sucursal</label>
-          {admin ? (
+          {crearTodas ? (
+            <div className="u-lock-note">
+              <Lock size={13} /> Todas las sucursales
+            </div>
+          ) : admin ? (
             <select className="field-select" value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} disabled={isEdit}>
               <option value="">Selecciona una sucursal</option>
               {sucursales.map((s) => (
@@ -206,6 +243,26 @@ export default function CategoriasView() {
       if (formModal.mode === "edit") {
         await api.put(`/categorias-productos/${formModal.categoria.id_categoria}`, payload);
         showToast("Categoría actualizada.");
+      } else if (payload.crear_para_todas) {
+        const nombreNuevo = payload.nombre;
+        let creadas = 0;
+        let omitidas = 0;
+        for (const s of sucursales) {
+          const yaExiste = categorias.some(
+            (c) => c.sucursal_id === s.id_sucursal && c.nombre.toLowerCase() === nombreNuevo.toLowerCase()
+          );
+          if (yaExiste) {
+            omitidas++;
+            continue;
+          }
+          await api.post("/categorias-productos", { nombre: nombreNuevo, sucursal_id: s.id_sucursal });
+          creadas++;
+        }
+        showToast(
+          omitidas > 0
+            ? `Categoría creada en ${creadas} sucursal(es). Omitida en ${omitidas} donde ya existía.`
+            : `Categoría creada en las ${creadas} sucursales.`
+        );
       } else {
         await api.post("/categorias-productos", payload);
         showToast("Categoría creada.");

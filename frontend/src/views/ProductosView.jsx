@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Pencil, Trash2, X, Search, AlertTriangle, Info, Lock, Loader2, ImagePlus } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Search, AlertTriangle, Info, Lock, Loader2, ImagePlus, Store } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError } from "../services/apiClient";
 import ImagenProducto from "../components/ImagenProducto";
@@ -64,6 +64,7 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
   const [precioBase, setPrecioBase] = useState(initial?.precio_base ?? "");
   const [sucursalId, setSucursalId] = useState(initial ? initial.sucursal_id : admin ? "" : sucursalActorId);
   const [categoriaId, setCategoriaId] = useState(initial?.categoria_id ?? "");
+  const [crearTodas, setCrearTodas] = useState(false);
   const [manejaStock, setManejaStock] = useState(initial?.maneja_stock ?? false);
   const [stockMinimo, setStockMinimo] = useState(initial?.stock_minimo ?? 0);
   const [stockInicial, setStockInicial] = useState(stockInicialActual ?? 0);
@@ -103,18 +104,28 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
   const nombreValido = nombre.trim().length >= 2;
   const precioValido = precioBase !== "" && Number(precioBase) >= 0;
   const sucursalValida = Boolean(sucursalId);
-  const duplicado = existentes.some(
-    (p) =>
-      p.nombre.toLowerCase() === nombre.trim().toLowerCase() &&
-      p.sucursal_id === Number(sucursalId) &&
-      p.id_producto !== initial?.id_producto
-  );
+  const duplicado =
+    !crearTodas &&
+    existentes.some(
+      (p) =>
+        p.nombre.toLowerCase() === nombre.trim().toLowerCase() &&
+        p.sucursal_id === Number(sucursalId) &&
+        p.id_producto !== initial?.id_producto
+    );
 
-  const formValido = nombreValido && precioValido && sucursalValida && !duplicado;
+  const formValido = nombreValido && precioValido && (crearTodas || (sucursalValida && !duplicado));
 
   function handleSucursalChange(value) {
     setSucursalId(value);
     setCategoriaId(""); // la categoría depende de la sucursal, se resetea
+  }
+
+  function handleCrearTodasChange(checked) {
+    setCrearTodas(checked);
+    if (checked) {
+      setSucursalId("");
+      setCategoriaId("");
+    }
   }
 
   function handleSubmit(e) {
@@ -126,13 +137,17 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
       nombre: nombre.trim(),
       descripcion: descripcion.trim() || null,
       precio_base: Number(precioBase),
-      sucursal_id: Number(sucursalId),
-      categoria_id: categoriaId ? Number(categoriaId) : null,
+      categoria_id: crearTodas ? null : categoriaId ? Number(categoriaId) : null,
       maneja_stock: manejaStock,
       stock_minimo: manejaStock ? Number(stockMinimo) : 0,
       activo,
     };
     if (!isEdit && manejaStock) payload.stock_inicial = Number(stockInicial);
+    if (crearTodas) {
+      payload.crear_para_todas = true;
+    } else {
+      payload.sucursal_id = Number(sucursalId);
+    }
     onSubmit(payload, { imagenFile, quitarImagen });
   }
 
@@ -193,10 +208,36 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
           </div>
         </div>
 
+        {!isEdit && admin && (
+          <label className={`pv-todas-toggle${crearTodas ? " is-activo" : ""}`}>
+            <input
+              type="checkbox"
+              className="pv-todas-toggle-input"
+              checked={crearTodas}
+              onChange={(e) => handleCrearTodasChange(e.target.checked)}
+            />
+            <div>
+              <span className="pv-todas-toggle-title">
+                <Store size={18} />
+                Crear para todas las sucursales
+              </span>
+              <p className="pv-todas-toggle-help">
+                Crea este producto (mismo precio y stock inicial) en cada sucursal existente. Se omite en las que ya
+                tengan un producto con este nombre. Queda sin categoría en todas — asígnala luego en cada una si la
+                necesitas.
+              </p>
+            </div>
+          </label>
+        )}
+
         <div className="pv-form-grid-2">
           <div className="field">
             <label className="field-label">Sucursal</label>
-            {admin ? (
+            {crearTodas ? (
+              <div className="pv-lock-note">
+                <Lock size={13} /> Todas las sucursales
+              </div>
+            ) : admin ? (
               <select className="field-select" value={sucursalId} onChange={(e) => handleSucursalChange(e.target.value)} disabled={isEdit}>
                 <option value="">Selecciona una sucursal</option>
                 {sucursales.map((s) => (
@@ -218,7 +259,7 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
               className="field-select"
               value={categoriaId}
               onChange={(e) => setCategoriaId(e.target.value)}
-              disabled={!sucursalId}
+              disabled={!sucursalId || crearTodas}
             >
               <option value="">Sin categoría</option>
               {categoriasDisponibles.map((c) => (
@@ -227,7 +268,11 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
                 </option>
               ))}
             </select>
-            {!sucursalId && <p className="field-help">Selecciona primero una sucursal.</p>}
+            {crearTodas ? (
+              <p className="field-help">No disponible: las categorías son propias de cada sucursal.</p>
+            ) : (
+              !sucursalId && <p className="field-help">Selecciona primero una sucursal.</p>
+            )}
           </div>
         </div>
 
@@ -403,43 +448,76 @@ export default function ProductosView() {
     setTimeout(() => setToast(null), 3000);
   }
 
+  // Hace el POST/PUT real de un producto (con o sin imagen). Separado de
+  // handleSubmit para poder reutilizarlo en el loop de "crear para todas
+  // las sucursales", donde se llama una vez por sucursal con el mismo
+  // archivo de imagen (si hay) pero un sucursal_id distinto cada vez.
+  async function crearOEditarProducto(payload, { imagenFile, quitarImagen } = {}, idParaEditar = null) {
+    if (imagenFile || quitarImagen) {
+      // FormData en vez de JSON porque hay que mandar el archivo real.
+      // Los valores null (ej. categoria_id sin elegir) se mandan como
+      // "" — el middleware global de Laravel los convierte de vuelta a
+      // null antes de llegar a la validación, igual que si hubieran
+      // venido en un body JSON normal.
+      const formData = new FormData();
+      Object.entries(payload).forEach(([key, value]) => {
+        if (value === null || value === undefined) {
+          formData.append(key, "");
+        } else if (typeof value === "boolean") {
+          formData.append(key, value ? "1" : "0");
+        } else {
+          formData.append(key, value);
+        }
+      });
+      if (imagenFile) formData.append("imagen", imagenFile);
+      if (quitarImagen && !imagenFile) formData.append("eliminar_imagen", "1");
+
+      if (idParaEditar) {
+        // Laravel no parsea multipart en verbos PUT reales, así que se
+        // manda por POST con el spoof estándar de _method (igual que
+        // cualquier <form method="POST"><input name="_method" value="PUT">).
+        formData.append("_method", "PUT");
+        await api.uploadFile(`/productos/${idParaEditar}`, formData);
+      } else {
+        await api.uploadFile("/productos", formData);
+      }
+    } else if (idParaEditar) {
+      await api.put(`/productos/${idParaEditar}`, payload);
+    } else {
+      await api.post("/productos", payload);
+    }
+  }
+
   async function handleSubmit(payload, { imagenFile, quitarImagen } = {}) {
     setSaving(true);
     try {
-      if (imagenFile || quitarImagen) {
-        // FormData en vez de JSON porque hay que mandar el archivo real.
-        // Los valores null (ej. categoria_id sin elegir) se mandan como
-        // "" — el middleware global de Laravel los convierte de vuelta a
-        // null antes de llegar a la validación, igual que si hubieran
-        // venido en un body JSON normal.
-        const formData = new FormData();
-        Object.entries(payload).forEach(([key, value]) => {
-          if (value === null || value === undefined) {
-            formData.append(key, "");
-          } else if (typeof value === "boolean") {
-            formData.append(key, value ? "1" : "0");
-          } else {
-            formData.append(key, value);
+      if (payload.crear_para_todas) {
+        const { crear_para_todas, ...datos } = payload;
+        let creados = 0;
+        let omitidos = 0;
+        for (const s of sucursales) {
+          const yaExiste = productos.some(
+            (p) => p.sucursal_id === s.id_sucursal && p.nombre.toLowerCase() === datos.nombre.toLowerCase()
+          );
+          if (yaExiste) {
+            omitidos++;
+            continue;
           }
-        });
-        if (imagenFile) formData.append("imagen", imagenFile);
-        if (quitarImagen && !imagenFile) formData.append("eliminar_imagen", "1");
-
-        if (formModal.mode === "edit") {
-          // Laravel no parsea multipart en verbos PUT reales, así que se
-          // manda por POST con el spoof estándar de _method (igual que
-          // cualquier <form method="POST"><input name="_method" value="PUT">).
-          formData.append("_method", "PUT");
-          await api.uploadFile(`/productos/${formModal.producto.id_producto}`, formData);
-        } else {
-          await api.uploadFile("/productos", formData);
+          await crearOEditarProducto({ ...datos, sucursal_id: s.id_sucursal }, { imagenFile, quitarImagen });
+          creados++;
         }
+        showToast(
+          omitidos > 0
+            ? `Producto creado en ${creados} sucursal(es). Omitido en ${omitidos} donde ya existía un producto con ese nombre.`
+            : `Producto creado en las ${creados} sucursales.`
+        );
       } else if (formModal.mode === "edit") {
-        await api.put(`/productos/${formModal.producto.id_producto}`, payload);
+        await crearOEditarProducto(payload, { imagenFile, quitarImagen }, formModal.producto.id_producto);
+        showToast("Producto actualizado.");
       } else {
-        await api.post("/productos", payload);
+        await crearOEditarProducto(payload, { imagenFile, quitarImagen });
+        showToast("Producto creado.");
       }
-      showToast(formModal.mode === "edit" ? "Producto actualizado." : "Producto creado.");
       await cargarDatos();
       setFormModal(null);
     } catch (e) {
