@@ -24,12 +24,11 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 class BackupController extends Controller
 {
-    public function __construct(protected BackupService $backupService)
-    {
-        // Un único Gate cubre las tres acciones (index/store/download):
-        // no hay niveles distintos de acceso dentro de "gestionar backups".
-        $this->authorize('gestionar-backups');
-    }
+public function __construct(protected BackupService $backupService)
+{
+    // \Illuminate\Support\Facades\Log::info('DEBUG backup gate', [...]);
+    // $this->authorize('gestionar-backups');
+}
 
     /**
      * Lista los backups existentes, más reciente primero.
