@@ -43,11 +43,26 @@ Route::middleware('auth:sanctum')->group(function () {
     // Catálogos globales (no multi-tenant)
     Route::apiResource('roles', RolController::class);
     Route::apiResource('sucursales', SucursalController::class);
-    Route::apiResource('metodos-pago', MetodoPagoController::class);
+    // Mismo problema que categorias-productos: 'metodos-pago' termina en
+    // 'o', así que Laravel ni siquiera intenta singularizarlo (su regla
+    // genérica solo quita una 's' final) y el wildcard queda 'metodos_pago',
+    // mientras que MetodoPagoController espera 'metodo_pago'.
+    Route::apiResource('metodos-pago', MetodoPagoController::class)
+        ->parameter('metodos-pago', 'metodo_pago');
 
     // Multi-tenant por sucursal
     Route::apiResource('usuarios', UsuarioController::class);
-    Route::apiResource('categorias-productos', CategoriaProductoController::class);
+    // OJO: forzamos el nombre del parámetro a 'categoria_producto'. Por
+    // defecto Laravel singulariza 'categorias-productos' quitando solo la
+    // 's' final de toda la cadena -> 'categorias_producto' (deja "categorias"
+    // en plural), que no coincide con el 'categoria_producto' que usa
+    // CategoriaProductoController::authorizeResource() ni con el
+    // $categoriaProducto de sus métodos show/update/destroy. Ese desajuste
+    // hacía que el middleware 'can:...' de authorizeResource() no encontrara
+    // el modelo en la ruta y negara el permiso por defecto (así se veía como
+    // "sin permisos" al eliminar, aunque el Policy en sí era correcto).
+    Route::apiResource('categorias-productos', CategoriaProductoController::class)
+        ->parameter('categorias-productos', 'categoria_producto');
     Route::apiResource('productos', ProductoController::class);
 
     // Inventario: sin store/destroy (nace y muere con el Producto)
@@ -64,8 +79,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // Detalles de venta: solo lectura (se crean junto con la Venta)
     Route::apiResource('detalle-ventas', DetalleVentaController::class)->only(['index', 'show']);
 
-    // Comprobantes de pago: sin update (se borra y se sube de nuevo)
-    Route::apiResource('comprobantes-pago', ComprobantePagoController::class)->only(['index', 'store', 'show', 'destroy']);
+    // Comprobantes de pago: sin update (se borra y se sube de nuevo).
+    // Mismo problema: 'comprobantes-pago' termina en 'o', Laravel no lo
+    // singulariza y el wildcard queda 'comprobantes_pago', mientras que
+    // ComprobantePagoController espera 'comprobante_pago' (rompía el show
+    // y el destroy de un comprobante puntual).
+    Route::apiResource('comprobantes-pago', ComprobantePagoController::class)
+        ->only(['index', 'store', 'show', 'destroy'])
+        ->parameter('comprobantes-pago', 'comprobante_pago');
 
     // Facturas: solo lectura (se generan automáticamente al pagar)
     Route::apiResource('facturas', FacturaController::class)->only(['index', 'show']);
