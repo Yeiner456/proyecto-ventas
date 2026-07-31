@@ -12,6 +12,18 @@
 .av-diff { background: #FAFAFA; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Roboto Mono', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .av-diff-label { font-family: 'Roboto', sans-serif; font-size: 11px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .03em; margin: 12px 0 6px 0; }
 
+/* Vista legible de campos (reemplaza el JSON crudo del detalle) */
+.av-campos { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-family: 'Roboto', sans-serif; font-size: 13px; }
+.av-campo-row { display: grid; grid-template-columns: 150px 1fr; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); align-items: baseline; }
+.av-campo-row:last-child { border-bottom: none; }
+.av-campo-row:nth-child(odd) { background: #FAFAFA; }
+.av-campo-row-3 { grid-template-columns: 150px 1fr 1fr; }
+.av-campo-row-header { background: var(--bg) !important; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--text-secondary); }
+.av-campo-label { color: var(--text-secondary); font-weight: 500; }
+.av-campo-valor { font-family: 'Roboto Mono', monospace; word-break: break-word; }
+.av-campo-antes { color: var(--danger); }
+.av-campo-despues { color: var(--sena-green-dark); font-weight: 600; }
+
 /* Grid de datos del detalle (Usuario / Sucursal / Fecha / IP / Tabla / Registro) */
 .av-detalle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; font-family: 'Roboto', sans-serif; font-size: 13px; }
 

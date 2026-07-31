@@ -20,6 +20,13 @@
 /* Nota de "bloqueado por sucursal" con candado, dentro del form */
 .pv-lock-note { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12.5px; }
 
+/* Ajuste de stock en línea dentro del modal de edición de producto */
+.pv-stock-ajuste { display: flex; flex-direction: column; gap: 6px; }
+.pv-stock-ajuste-actual { font-family: 'Roboto Mono', monospace; font-weight: 600; font-size: 15px; }
+.pv-stock-ajuste-row { display: flex; gap: 8px; align-items: center; }
+.pv-stock-ajuste-cantidad { max-width: 90px; flex-shrink: 0; }
+.pv-stock-ajuste-row .field-input:nth-child(2) { flex: 1; }
+
 /* Fila de checkbox + label */
 .pv-checkbox-row { display: flex; align-items: center; gap: 8px; }
 

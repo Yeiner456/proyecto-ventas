@@ -24,10 +24,12 @@ import "../styles/ProductosView.css";
  * IMPORTANTE: 'stock' no vive en Producto sino en un modelo aparte
  * (Inventario, 1:1). GET /api/productos ya viene con 'inventario' anidado
  * (ProductoController::index hace ->with(['sucursal', 'categoria',
- * 'inventario'])), así que se lee con p.inventario?.cantidad — pero
- * ajustar el stock sigue siendo una llamada aparte a
- * PATCH /api/inventario/{id}/ajustar, no a /api/productos (por eso este
- * CRUD no toca el stock de un producto ya creado, solo lo fija al crear).
+ * 'inventario'])), así que se lee con p.inventario?.cantidad. El PUT de
+ * este CRUD nunca toca el stock de un producto ya creado (solo lo fija
+ * al crear, vía stock_inicial) — el ajuste en modo edición usa una
+ * llamada aparte a PATCH /api/inventario/{id}/ajustar, disparada desde
+ * un widget inline en el propio modal (ver ProductoFormModal), así el
+ * admin de sucursal no tiene que salir a la vista de Inventario.
  * ==========================================================================*/
 
 function puedeGestionar(actor) {
@@ -54,7 +56,7 @@ function stockEstado(producto) {
 }
 
 
-function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existentes, stockInicialActual, sucursales, categorias }) {
+function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existentes, stockInicialActual, sucursales, categorias, onStockAjustado }) {
   const isEdit = Boolean(initial);
   const admin = actorEsAdminGeneral(actor);
   const sucursalActorId = sucursales.find((s) => s.nombre === actor.sucursal)?.id_sucursal ?? null;
@@ -70,6 +72,56 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
   const [stockInicial, setStockInicial] = useState(stockInicialActual ?? 0);
   const [activo, setActivo] = useState(initial?.activo ?? true);
   const [touched, setTouched] = useState(false);
+
+  // Ajuste de stock en línea (solo edición): permite fijar directamente
+  // el nuevo stock (no un delta +/-) sin salir al módulo de Inventario.
+  // El backend (PATCH /inventario/{id}/ajustar) sigue esperando un delta,
+  // así que aquí se calcula como nuevoStock - stockMostrado antes de
+  // mandarlo. 'stockMostrado' es el valor que se ve en pantalla y se
+  // actualiza al vuelo tras un ajuste exitoso, sin esperar a que se
+  // recargue toda la lista de productos.
+  const [stockMostrado, setStockMostrado] = useState(stockInicialActual ?? 0);
+  const [nuevoStock, setNuevoStock] = useState("");
+  const [ajusteObservacion, setAjusteObservacion] = useState("");
+  const [ajustando, setAjustando] = useState(false);
+  const [ajusteError, setAjusteError] = useState(null);
+
+  async function handleAjustarStock() {
+    setAjusteError(null);
+    if (nuevoStock === "") {
+      setAjusteError("Ingresa el nuevo stock.");
+      return;
+    }
+    const valor = Number(nuevoStock);
+    if (!Number.isInteger(valor) || valor < 0) {
+      setAjusteError("El stock debe ser un número entero de 0 o mayor.");
+      return;
+    }
+    const delta = valor - stockMostrado;
+    if (delta === 0) {
+      setAjusteError("Ese ya es el stock actual.");
+      return;
+    }
+    if (!ajusteObservacion.trim()) {
+      setAjusteError("Escribe una observación (ej. conteo físico, merma, mercancía nueva).");
+      return;
+    }
+    setAjustando(true);
+    try {
+      const resp = await api.patch(`/inventario/${initial.inventario.id_inventario}/ajustar`, {
+        cantidad: delta,
+        observacion: ajusteObservacion.trim(),
+      });
+      setStockMostrado(resp.inventario.cantidad);
+      setNuevoStock("");
+      setAjusteObservacion("");
+      onStockAjustado?.();
+    } catch (e) {
+      setAjusteError(e instanceof ApiError ? e.message : (e?.message ?? "No se pudo ajustar el stock."));
+    } finally {
+      setAjustando(false);
+    }
+  }
 
   // Imagen: 'imagenFile' es el archivo nuevo elegido (aún no subido);
   // 'imagenPreview' es su URL local para pintar la vista previa sin
@@ -319,8 +371,33 @@ function ProductoFormModal({ actor, initial, onCancel, onSubmit, saving, existen
             ) : (
               <div className="field">
                 <label className="field-label">Stock actual</label>
-                <div className="pv-lock-note">
-                  <Lock size={13} /> {stockInicialActual} unidades — ajústalo desde Inventario, no desde aquí.
+                <div className="pv-stock-ajuste">
+                  <div className="pv-stock-ajuste-actual">{stockMostrado} unidades</div>
+                  <div className="pv-stock-ajuste-row">
+                    <input
+                      type="number"
+                      className="field-input pv-stock-ajuste-cantidad"
+                      placeholder="Nuevo stock"
+                      min="0"
+                      step="1"
+                      value={nuevoStock}
+                      onChange={(e) => setNuevoStock(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      className="field-input"
+                      placeholder="Observación (ej. conteo físico, merma...)"
+                      value={ajusteObservacion}
+                      onChange={(e) => setAjusteObservacion(e.target.value)}
+                    />
+                    <button type="button" className="btn btn-outline btn-sm" onClick={handleAjustarStock} disabled={ajustando}>
+                      {ajustando ? "Ajustando..." : "Ajustar"}
+                    </button>
+                  </div>
+                  {ajusteError && <p className="field-help error">{ajusteError}</p>}
+                  <p className="field-help">
+                    Escribe el nuevo stock total (no puede ser negativo). Queda registrado en el historial de movimientos.
+                  </p>
                 </div>
               </div>
             )}
@@ -742,6 +819,7 @@ export default function ProductosView() {
           categorias={categorias}
           onCancel={() => setFormModal(null)}
           onSubmit={handleSubmit}
+          onStockAjustado={cargarDatos}
         />
       )}
 
