@@ -408,6 +408,7 @@ export default function UsuariosView() {
         <table className="data-table">
           <thead>
             <tr>
+              <th>id</th>
               <th>Usuario</th>
               <th>Rol</th>
               <th>Sucursal</th>
@@ -440,6 +441,9 @@ export default function UsuariosView() {
             ) : (
               visibles.map((u) => (
                 <tr key={u.id_usuario}>
+                  <td>
+                    {u.id_usuario}
+                  </td>
                   <td>
                     <div className="uv-name-cell">
                       {u.nombre}
