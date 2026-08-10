@@ -1,4 +1,3 @@
-import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import AppLayout from "./layouts/AppLayout";
@@ -18,13 +17,11 @@ import AuditoriaView from "./views/AuditoriaView";
 import BackupsView from "./views/BackupsView";
 import DashboardView from "./views/DashboardView";
 import ReportesView from "./views/ReportesView";
-// ...
-
 
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/proyecto-ventas-front">
         <Routes>
           <Route path="/login" element={<LoginView />} />
 
