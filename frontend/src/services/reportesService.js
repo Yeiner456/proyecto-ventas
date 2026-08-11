@@ -25,10 +25,25 @@ import { api } from "./apiClient";
  *   devuelve solo su propia sucursal sin que la pida (aplicarFiltroSucursal
  *   en cada controller), así que sucursalIdFiltro llega como null.
  *
+ * Filtro por fecha (agregado 2026-08-11, SOLO para "ventas"):
+ *   Mismo criterio que el filtro de sucursal: se filtra en el navegador,
+ *   sin tocar el backend. Cada tipo de reporte que admita este filtro
+ *   trae 'fechaDe(fila)' — hoy solo "ventas" lo define, porque es el
+ *   único de los 4 con una fecha de negocio relevante para filtrar. Los
+ *   demás tipos simplemente no lo tienen y obtenerDatosReporte() lo
+ *   ignora para ellos sin error.
+ *
+ *   'calcularRangoFecha()' traduce un preset ("semana", "mes", etc.) o
+ *   una selección manual del usuario a un rango { desde, hasta } de
+ *   objetos Date, en hora LOCAL del navegador (no UTC), para que
+ *   coincida con cómo el usuario percibe "hoy" y con formatoFecha() de
+ *   aquí mismo. "Última semana"/"último mes" son ventanas CORRIDAS de
+ *   7/30 días incluyendo el día de hoy, no semana/mes calendario.
+ *
  * Si en el futuro el volumen de datos crece y este "traer todo y filtrar
  * en el navegador" pesa demasiado, la mejora natural es agregar soporte a
- * '?sucursal_id=' en esos 4 controladores (un cambio pequeño y localizado,
- * no un rediseño).
+ * '?sucursal_id=' y '?desde=/?hasta=' en los controllers (un cambio
+ * pequeño y localizado, no un rediseño).
  * ==========================================================================*/
 
 const TAMANO_PAGINA = 200;
@@ -74,6 +89,8 @@ function formatoFecha(iso) {
  * Un tipo de reporte = un recurso exportable.
  *   endpoint    -> de dónde se trae el dataset completo
  *   sucursalDe  -> cómo leer el sucursal_id de una fila de ESTE recurso
+ *   fechaDe     -> (opcional) cómo leer la fecha de una fila, para el
+ *                  filtro de fecha. Solo "ventas" lo trae por ahora.
  *   columnas    -> encabezado + cómo leer/formatear cada celda
  *
  * IMPORTANTE: 'usuarios' nunca expone password_hash aquí ni en el backend
@@ -116,6 +133,7 @@ export const TIPOS_REPORTE = [
     descripcion: "Historial de ventas con estado y método de pago.",
     endpoint: "/ventas",
     sucursalDe: (fila) => fila.sucursal_id,
+    fechaDe: (fila) => fila.created_at,
     columnas: [
       { header: "Venta #", accessor: (f) => f.id_venta },
       { header: "Fecha", accessor: (f) => formatoFecha(f.created_at) },
@@ -145,16 +163,100 @@ export const TIPOS_REPORTE = [
 ];
 
 /**
- * Dataset completo de un tipo de reporte.
- *   sucursalIdFiltro === null  -> no filtra (caso admin_sucursal: el
- *     backend ya limitó todo a su propia sucursal).
- *   sucursalIdFiltro (number)  -> filtra en el navegador por esa
- *     sucursal (caso admin_general, que recibió todas mezcladas).
+ * Calcula el rango { desde, hasta } (objetos Date, en hora local) para
+ * el filtro de fecha de Ventas. 'hasta' siempre cierra al final del día
+ * (23:59:59.999) para no perder registros de "hoy" por la hora exacta
+ * en la que se genera el reporte.
+ *
+ *   'semana'      -> últimos 7 días corridos, incluyendo hoy
+ *   'mes'         -> últimos 30 días corridos, incluyendo hoy
+ *   'especifica'  -> un solo día -> opciones.fecha ("YYYY-MM-DD")
+ *   'rango'       -> rango libre -> opciones.desde / opciones.hasta ("YYYY-MM-DD")
+ *   cualquier otro valor (ej. 'todo') o datos incompletos -> null (sin filtro)
  */
-export async function obtenerDatosReporte(tipo, sucursalIdFiltro) {
-  const filas = await obtenerTodasLasPaginas(tipo.endpoint);
+export function calcularRangoFecha(preset, opciones = {}) {
+  const hoy = new Date();
+  const finDeHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59, 999);
 
-  if (sucursalIdFiltro == null) return filas;
+  function parsearFechaLocal(yyyyMmDd, horas, minutos, segundos, ms) {
+    const [anio, mes, dia] = yyyyMmDd.split("-").map(Number);
+    return new Date(anio, mes - 1, dia, horas, minutos, segundos, ms);
+  }
 
-  return filas.filter((fila) => tipo.sucursalDe(fila) === sucursalIdFiltro);
+  switch (preset) {
+    case "semana": {
+      const desde = new Date(finDeHoy);
+      desde.setDate(desde.getDate() - 6);
+      desde.setHours(0, 0, 0, 0);
+      return { desde, hasta: finDeHoy };
+    }
+    case "mes": {
+      const desde = new Date(finDeHoy);
+      desde.setDate(desde.getDate() - 29);
+      desde.setHours(0, 0, 0, 0);
+      return { desde, hasta: finDeHoy };
+    }
+    case "especifica": {
+      if (!opciones.fecha) return null;
+      const desde = parsearFechaLocal(opciones.fecha, 0, 0, 0, 0);
+      const hasta = parsearFechaLocal(opciones.fecha, 23, 59, 59, 999);
+      return { desde, hasta };
+    }
+    case "rango": {
+      if (!opciones.desde || !opciones.hasta) return null;
+      let desde = parsearFechaLocal(opciones.desde, 0, 0, 0, 0);
+      let hasta = parsearFechaLocal(opciones.hasta, 23, 59, 59, 999);
+      if (desde > hasta) {
+        [desde, hasta] = [hasta, desde]; // defensivo: fechas invertidas
+      }
+      return { desde, hasta };
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Etiqueta legible del filtro de fecha activo, para el subtítulo del
+ * PDF exportado (trazabilidad: con qué filtro se generó el archivo).
+ */
+export function describirRangoFecha(preset, rango) {
+  if (!rango) return null;
+  const fmt = (d) => d.toLocaleDateString("es-CO");
+  if (preset === "semana") return "Última semana";
+  if (preset === "mes") return "Último mes";
+  if (preset === "especifica") return `Fecha: ${fmt(rango.desde)}`;
+  if (preset === "rango") return `Del ${fmt(rango.desde)} al ${fmt(rango.hasta)}`;
+  return null;
+}
+
+/**
+ * Dataset completo de un tipo de reporte.
+ *   sucursalIdFiltro === null/undefined -> no filtra por sucursal (caso
+ *     admin_sucursal: el backend ya limitó todo a su propia sucursal).
+ *   sucursalIdFiltro (number) -> filtra en el navegador por esa sucursal
+ *     (caso admin_general, que recibió todas mezcladas).
+ *
+ *   rangoFecha (objeto { desde, hasta } de calcularRangoFecha(), o null)
+ *     -> si se pasa Y el tipo trae 'fechaDe', filtra también por fecha.
+ *     Para tipos sin 'fechaDe' (hoy: productos, usuarios, inventario) se
+ *     ignora sin error, así que es seguro pasar null siempre para ellos.
+ */
+export async function obtenerDatosReporte(tipo, sucursalIdFiltro, rangoFecha = null) {
+  let filas = await obtenerTodasLasPaginas(tipo.endpoint);
+
+  if (sucursalIdFiltro != null) {
+    filas = filas.filter((fila) => tipo.sucursalDe(fila) === sucursalIdFiltro);
+  }
+
+  if (rangoFecha && tipo.fechaDe) {
+    filas = filas.filter((fila) => {
+      const valor = tipo.fechaDe(fila);
+      if (!valor) return false;
+      const fecha = new Date(valor);
+      return fecha >= rangoFecha.desde && fecha <= rangoFecha.hasta;
+    });
+  }
+
+  return filas;
 }
