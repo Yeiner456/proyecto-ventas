@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider } from "./context/authcontext.jsx";
 import AppLayout from "./layouts/AppLayout";
 import RequireAuth from "./components/RequireAuth";
 import LoginView from "./views/LoginView";
@@ -21,7 +21,8 @@ import ReportesView from "./views/ReportesView";
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter basename="/proyecto-ventas-front">
+      {/* basename dinámico: sigue automáticamente lo que diga "base" en vite.config.js */}
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
         <Routes>
           <Route path="/login" element={<LoginView />} />
 
