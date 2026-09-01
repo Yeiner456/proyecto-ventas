@@ -158,9 +158,10 @@ const TAMANO_COMPROBANTE_MAXIMO = 5 * 1024 * 1024; // 5MB, igual que StoreCompro
 /* ----------------------------------------------------------------------------
  * AdjuntarComprobante — subir un comprobante de pago para una venta que
  * sigue 'pendiente', desde el detalle en Ventas (no desde el flujo de
- * cobro de NuevaVentaView). Pensado para admin_sucursal (ComprobantePagoPolicy
- * ya permite admin_sucursal || cajero || admin_general; aquí solo se expone
- * a admin_sucursal/admin_general porque es el caso que se pidió).
+ * cobro de NuevaVentaView). ComprobantePagoPolicy::create() permite
+ * admin_sucursal || cajero (admin_general entra por before()), así que
+ * se expone a los tres roles: el cajero no debería depender de un admin
+ * para adjuntar el comprobante de una venta que él mismo dejó pendiente.
  * -------------------------------------------------------------------------- */
 function AdjuntarComprobante({ ventaId, onSubido }) {
   const [archivo, setArchivo] = useState(null);
@@ -374,7 +375,7 @@ function DetalleModal({ venta: ventaInicial, actor, onClose }) {
           </div>
         )}
 
-        {!cargando && venta.estado === "pendiente" && (actor.rol === "admin_sucursal" || actorEsAdminGeneral(actor)) && (
+        {!cargando && venta.estado === "pendiente" && (actor.rol === "admin_sucursal" || actor.rol === "cajero" || actorEsAdminGeneral(actor)) && (
           <AdjuntarComprobante
             ventaId={venta.id_venta}
             onSubido={(nuevo) => setVenta((prev) => ({ ...prev, comprobantes: [nuevo, ...(prev.comprobantes ?? [])] }))}
