@@ -35,11 +35,24 @@ import "../styles/VentasView.css";
  *     el rol — lo replico literal, incluso para admin_general.
  *
  * GET /api/ventas ya viene con TODO anidado (VentaController::index hace
- * ->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto'])), así
- * que no hace falta pedir /api/usuarios ni /api/metodos-pago aparte para
- * mostrar nombres. OJO con el nombre de la clave: Eloquent serializa las
- * relaciones camelCase en snake_case — la relación metodoPago() llega
- * como venta.metodo_pago, NO venta.metodoPago.
+ * ->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto.categoria'])),
+ * así que no hace falta pedir /api/usuarios, /api/metodos-pago ni
+ * /api/categorias-productos aparte para mostrar nombres. OJO con el
+ * nombre de la clave: Eloquent serializa las relaciones camelCase en
+ * snake_case — la relación metodoPago() llega como venta.metodo_pago,
+ * NO venta.metodoPago.
+ *
+ * CATEGORÍAS (columna + filtro, agregado 2026): una venta puede tener
+ * productos de VARIAS categorías a la vez (café + pastel en la misma
+ * venta), así que no existe "la categoría de una venta" — existen las
+ * categorías presentes en sus detalles. categoriasDeVenta() resuelve
+ * eso deduplicando por id_categoria. Las opciones del filtro salen de
+ * las propias ventas ya cargadas (categoriasDisponibles), no de un
+ * fetch aparte a /api/categorias-productos: así solo aparecen en el
+ * filtro categorías que de verdad tienen ventas asociadas, y funciona
+ * igual para admin_general (todas las sucursales) que para
+ * admin_sucursal/cajero (ya vienen scoped por FiltraPorSucursal), sin
+ * necesitar una rama de código distinta por rol.
  * ==========================================================================*/
 
 const ESTADO_SIGUIENTE = {
@@ -87,6 +100,18 @@ function puedeEliminar(actor, venta, sucursales) {
   return actor.rol === "admin_sucursal" && ventaVisible(actor, venta, sucursales);
 }
 
+// Una venta puede traer productos de varias categorías a la vez (ej. un
+// café + un pastel), así que esto devuelve la lista de categorías ÚNICAS
+// presentes en sus detalles — no una sola. Requiere que el backend haya
+// cargado 'detalles.producto.categoria' (ver VentaController::index/show).
+function categoriasDeVenta(venta) {
+  const mapa = new Map();
+  (venta.detalles ?? []).forEach((d) => {
+    if (d.producto?.categoria) mapa.set(d.producto.categoria.id_categoria, d.producto.categoria);
+  });
+  return [...mapa.values()];
+}
+
 function formatFecha(iso) {
   return new Date(iso).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
 }
@@ -94,7 +119,6 @@ function formatFecha(iso) {
 function formatMoney(n) {
   return `$${Number(n).toLocaleString("es-CO")}`;
 }
-
 
 function CancelarModal({ venta, onCancel, onConfirm, procesando }) {
   const [motivo, setMotivo] = useState("");
@@ -158,9 +182,10 @@ const TAMANO_COMPROBANTE_MAXIMO = 5 * 1024 * 1024; // 5MB, igual que StoreCompro
 /* ----------------------------------------------------------------------------
  * AdjuntarComprobante — subir un comprobante de pago para una venta que
  * sigue 'pendiente', desde el detalle en Ventas (no desde el flujo de
- * cobro de NuevaVentaView). Pensado para admin_sucursal (ComprobantePagoPolicy
- * ya permite admin_sucursal || cajero || admin_general; aquí solo se expone
- * a admin_sucursal/admin_general porque es el caso que se pidió).
+ * cobro de NuevaVentaView). ComprobantePagoPolicy::create() permite
+ * admin_sucursal || cajero (admin_general entra por before()), así que
+ * se expone a los tres roles: el cajero no debería depender de un admin
+ * para adjuntar el comprobante de una venta que él mismo dejó pendiente.
  * -------------------------------------------------------------------------- */
 function AdjuntarComprobante({ ventaId, onSubido }) {
   const [archivo, setArchivo] = useState(null);
@@ -374,7 +399,7 @@ function DetalleModal({ venta: ventaInicial, actor, onClose }) {
           </div>
         )}
 
-        {!cargando && venta.estado === "pendiente" && (actor.rol === "admin_sucursal" || actorEsAdminGeneral(actor)) && (
+        {!cargando && venta.estado === "pendiente" && (actor.rol === "admin_sucursal" || actor.rol === "cajero" || actorEsAdminGeneral(actor)) && (
           <AdjuntarComprobante
             ventaId={venta.id_venta}
             onSubido={(nuevo) => setVenta((prev) => ({ ...prev, comprobantes: [nuevo, ...(prev.comprobantes ?? [])] }))}
@@ -396,6 +421,7 @@ export default function VentasView() {
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
   const [filtroEstado, setFiltroEstado] = useState("");
+  const [filtroCategoria, setFiltroCategoria] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [detalleVenta, setDetalleVenta] = useState(null);
@@ -425,14 +451,26 @@ export default function VentasView() {
     cargarDatos();
   }, [cargarDatos]);
 
+  // Solo categorías que realmente aparecen en al menos una venta visible
+  // para este actor — evitar mostrar una categoría en el filtro que no
+  // va a devolver ningún resultado.
+  const categoriasDisponibles = useMemo(() => {
+    const mapa = new Map();
+    ventas
+      .filter((v) => ventaVisible(actor, v, sucursales))
+      .forEach((v) => categoriasDeVenta(v).forEach((c) => mapa.set(c.id_categoria, c)));
+    return [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [ventas, actor, sucursales]);
+
   const visibles = useMemo(() => {
     return ventas
       .filter((v) => ventaVisible(actor, v, sucursales))
       .filter((v) => !filtroEstado || v.estado === filtroEstado)
+      .filter((v) => !filtroCategoria || categoriasDeVenta(v).some((c) => c.id_categoria === Number(filtroCategoria)))
       .filter((v) => !desde || v.created_at.slice(0, 10) >= desde)
       .filter((v) => !hasta || v.created_at.slice(0, 10) <= hasta)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [ventas, actor, sucursales, filtroEstado, desde, hasta]);
+  }, [ventas, actor, sucursales, filtroEstado, filtroCategoria, desde, hasta]);
 
   const stats = useMemo(() => {
     const base = ventas.filter((v) => ventaVisible(actor, v, sucursales));
@@ -443,6 +481,13 @@ export default function VentasView() {
       vendido: facturables.reduce((sum, v) => sum + Number(v.total), 0),
     };
   }, [ventas, actor, sucursales]);
+
+  // Columnas reales de la tabla: 8 para admin_general (incluye
+  // "Sucursal"), 7 para admin_sucursal/cajero. Antes de agregar
+  // "Categorías" esto estaba fijo en 7 para ambos casos — inofensivo
+  // (colSpan de más no rompe nada) pero impreciso; se deja exacto ya
+  // que se está tocando esta misma tabla.
+  const numColumnas = actorEsAdminGeneral(actor) ? 8 : 7;
 
   function showToast(msg) {
     setToast(msg);
@@ -529,6 +574,12 @@ export default function VentasView() {
             <option key={e} value={e}>{ESTADO_LABEL[e]}</option>
           ))}
         </select>
+        <select className="field-select vv-select" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
+          <option value="">Todas las categorías</option>
+          {categoriasDisponibles.map((c) => (
+            <option key={c.id_categoria} value={c.id_categoria}>{c.nombre}</option>
+          ))}
+        </select>
         <input className="field-input vv-date" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} title="Desde" />
         <input className="field-input vv-date" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} title="Hasta" />
       </div>
@@ -539,6 +590,7 @@ export default function VentasView() {
             <tr>
               <th>Venta</th>
               <th>Fecha</th>
+              <th>Categorías</th>
               {actorEsAdminGeneral(actor) && <th>Sucursal</th>}
               <th>Cajero</th>
               <th>Estado</th>
@@ -549,7 +601,7 @@ export default function VentasView() {
           <tbody>
             {cargando ? (
               <tr className="empty-row">
-                <td colSpan={7}>
+                <td colSpan={numColumnas}>
                   <div className="u-loading-row">
                     <Loader2 size={18} className="u-spin" /> Cargando ventas...
                   </div>
@@ -557,7 +609,7 @@ export default function VentasView() {
               </tr>
             ) : errorCarga ? (
               <tr className="empty-row">
-                <td colSpan={7}>
+                <td colSpan={numColumnas}>
                   <div className="alert alert-danger u-max-480">
                     <AlertTriangle size={16} className="u-icon-inline" />
                     <span>{errorCarga}</span>
@@ -566,7 +618,7 @@ export default function VentasView() {
               </tr>
             ) : visibles.length === 0 ? (
               <tr className="empty-row">
-                <td colSpan={7}>No hay ventas que coincidan con el filtro.</td>
+                <td colSpan={numColumnas}>No hay ventas que coincidan con el filtro.</td>
               </tr>
             ) : (
               visibles.map((v) => (
@@ -578,6 +630,17 @@ export default function VentasView() {
                     </div>
                   </td>
                   <td className="text-mono">{formatFecha(v.created_at)}</td>
+                  <td>
+                    {categoriasDeVenta(v).length === 0 ? (
+                      "—"
+                    ) : (
+                      <div className="vv-categorias-cell">
+                        {categoriasDeVenta(v).map((c) => (
+                          <span key={c.id_categoria} className="vv-categoria-chip">{c.nombre}</span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   {actorEsAdminGeneral(actor) && <td>{v.sucursal?.nombre ?? "—"}</td>}
                   <td>{v.cajero?.nombre ?? "—"}</td>
                   <td>

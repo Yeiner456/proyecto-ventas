@@ -36,7 +36,10 @@ class VentaController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = Venta::query()->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto']);
+        // 'detalles.producto.categoria' (antes solo 'detalles.producto'):
+        // el listado de Ventas ahora muestra y filtra por las categorías
+        // de los productos de cada venta (ver VentasView.jsx).
+        $query = Venta::query()->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto.categoria']);
 
         $this->aplicarFiltroSucursal($query);
 
@@ -123,8 +126,11 @@ class VentaController extends Controller
     public function show(Venta $venta): JsonResponse
     {
         // Autorización de 'view' ya resuelta por authorizeResource().
+        // 'detalles.producto.categoria' agregado por el mismo motivo que
+        // en index(): el detalle de una venta también necesita mostrar
+        // la categoría de cada producto vendido.
         return response()->json($venta->load([
-            'sucursal', 'cajero', 'metodoPago', 'detalles.producto', 'comprobantes', 'factura',
+            'sucursal', 'cajero', 'metodoPago', 'detalles.producto.categoria', 'comprobantes', 'factura',
         ]));
     }
 
