@@ -38,6 +38,36 @@ import "../styles/DashboardView.css";
  * actor.rol === "contador" — ese rol no existe en el sistema (ver
  * RolSeeder / migración de datos inicial: solo admin_general,
  * admin_sucursal, cajero), así que esa rama nunca se ejecutaba.
+ *
+ * "FACTURADO HOY" (antes "Total facturado", cambio del 2026):
+ *   El KPI de dinero y su desglose por sucursal mostraban la suma
+ *   HISTÓRICA de todas las facturas desde que existe el sistema. Los
+ *   usuarios lo leían como "cuánto llevo hoy" y terminaban yendo a
+ *   Reportes → Ventas a armar un filtro de fecha cada vez que querían
+ *   saber el corte del día. Ahora ambos (KPI y desglose por sucursal)
+ *   muestran solo lo facturado en la fecha de HOY. El histórico
+ *   completo sigue disponible en Reportes → Ventas, que es su lugar
+ *   natural — no se duplica aquí a propósito.
+ *
+ *   No se agregó ningún query param ni endpoint nuevo al backend:
+ *   'facturas' ya se trae completo (getAllPages) y el corte por día se
+ *   hace en memoria con useMemo, igual que el filtro de fecha de
+ *   Reportes → Ventas (ver reportesService.js). Si el volumen de
+ *   facturas crece mucho, esto entra en la misma nota de rendimiento
+ *   de más arriba.
+ *
+ *   "Hoy" se calcula con la fecha LOCAL del navegador (hoyLocalISO(),
+ *   NO toISOString() — que convierte a UTC y podría desfasar el corte
+ *   de medianoche) y se compara contra los primeros 10 caracteres de
+ *   created_at, el mismo criterio que ya usan los filtros 'desde'/
+ *   'hasta' de VentasView/FacturasView. Al recalcularse en cada
+ *   montaje del componente, basta con recargar/volver a entrar al
+ *   Dashboard para que el corte quede en el día correcto — no hace
+ *   falta polling ni auto-refresco (decisión explícita del equipo).
+ *
+ *   'Ventas registradas' y 'En curso' NO cambiaron: siguen siendo
+ *   conteos de estado/histórico, no montos de dinero, y no fueron parte
+ *   de la queja reportada.
  * ==========================================================================*/
 
 function formatMoney(n) {
@@ -46,6 +76,19 @@ function formatMoney(n) {
 
 function formatFecha(iso) {
   return new Date(iso).toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
+}
+
+// Fecha LOCAL (no UTC) en formato YYYY-MM-DD, para comparar contra
+// created_at.slice(0, 10) — mismo criterio que VentasView/FacturasView.
+// OJO: no usar new Date().toISOString().slice(0,10) acá, porque
+// convierte a UTC y cerca de medianoche podría marcar el día
+// equivocado según la zona horaria del navegador.
+function hoyLocalISO() {
+  const ahora = new Date();
+  const anio = ahora.getFullYear();
+  const mes = String(ahora.getMonth() + 1).padStart(2, "0");
+  const dia = String(ahora.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
 }
 
 const ESTADO_LABEL = {
@@ -115,15 +158,25 @@ export default function DashboardView() {
   }, [notificaciones, admin, actor]);
 
   const enCurso = ventas.filter((v) => !["pagado", "entregado", "cancelado"].includes(v.estado));
-  const totalFacturado = facturas.reduce((sum, f) => sum + Number(f.total), 0);
+
+  // Se recalcula en cada render/montaje, así que al abrir el Dashboard
+  // un día distinto el corte cae automáticamente en la fecha nueva.
+  const hoy = hoyLocalISO();
+
+  const facturasHoy = useMemo(
+    () => facturas.filter((f) => f.created_at?.slice(0, 10) === hoy),
+    [facturas, hoy]
+  );
+
+  const totalFacturadoHoy = facturasHoy.reduce((sum, f) => sum + Number(f.total), 0);
 
   const ventasPorSucursal = useMemo(() => {
     if (!admin) return [];
     return sucursales.map((s) => ({
       sucursal: s.nombre,
-      total: facturas.filter((f) => f.sucursal_id === s.id_sucursal).reduce((sum, f) => sum + Number(f.total), 0),
+      total: facturasHoy.filter((f) => f.sucursal_id === s.id_sucursal).reduce((sum, f) => sum + Number(f.total), 0),
     }));
-  }, [admin, sucursales, facturas]);
+  }, [admin, sucursales, facturasHoy]);
 
   const ventasRecientes = [...ventas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
 
@@ -161,8 +214,8 @@ export default function DashboardView() {
           <div className={`stat-value${enCurso.length > 0 ? " u-value-warning" : ""}`}>{enCurso.length}</div>
         </div>
         <div className="dv-kpi">
-          <div className="dv-kpi-top"><span className="text-muted">Total facturado</span><div className="dv-kpi-icon"><Receipt size={16} /></div></div>
-          <div className="stat-value">{formatMoney(totalFacturado)}</div>
+          <div className="dv-kpi-top"><span className="text-muted">Facturado hoy</span><div className="dv-kpi-icon"><Receipt size={16} /></div></div>
+          <div className="stat-value">{formatMoney(totalFacturadoHoy)}</div>
         </div>
         <div className="dv-kpi">
           <div className="dv-kpi-top"><span className="text-muted">Stock bajo</span><div className="dv-kpi-icon"><PackageX size={16} /></div></div>
@@ -175,7 +228,7 @@ export default function DashboardView() {
           {admin && (
             <div className="dv-card">
               <div className="dv-card-header">
-                <h3 className="dv-card-title">Facturado por sucursal</h3>
+                <h3 className="dv-card-title">Facturado hoy por sucursal</h3>
               </div>
               {ventasPorSucursal.map((s) => (
                 <div className="dv-row" key={s.sucursal}>
