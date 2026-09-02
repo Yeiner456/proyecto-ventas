@@ -450,6 +450,7 @@ export default function VentasView() {
   useEffect(() => {
     cargarDatos();
   }, [cargarDatos]);
+  
 
   // Solo categorías que realmente aparecen en al menos una venta visible
   // para este actor — evitar mostrar una categoría en el filtro que no
