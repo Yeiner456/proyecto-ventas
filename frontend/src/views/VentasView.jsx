@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight, Loader2, Paperclip, ExternalLink } from "lucide-react";
+import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight, Loader2, Paperclip, ExternalLink, FileSpreadsheet } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError, comprobanteUrl } from "../services/apiClient";
+import { descargarExcel, nombreArchivoConFecha } from "../utils/exportar";
 import "../styles/VentasView.css";
 
 /* ============================================================================
@@ -53,6 +54,30 @@ import "../styles/VentasView.css";
  * igual para admin_general (todas las sucursales) que para
  * admin_sucursal/cajero (ya vienen scoped por FiltraPorSucursal), sin
  * necesitar una rama de código distinta por rol.
+ *
+ * KPIs REACTIVOS A LOS FILTROS (agregado 2026): "Ventas", "En curso" y
+ * "Total vendido" ahora se calculan sobre 'visibles' (ya filtrado por
+ * estado/categoría/fecha) en vez de sobre el total sin filtrar. Esto es
+ * intencional: si filtras por estado 'pendiente', que "Total vendido"
+ * muestre $0 es correcto — dentro de lo que estás viendo, no hay nada
+ * pagado. "Ventas de hoy" es una tarjeta nueva que aplica esos mismos
+ * filtros y ADEMÁS recorta a la fecha de HOY (independiente de si hay
+ * un rango 'desde'/'hasta' distinto seleccionado) — mismo criterio de
+ * fecha LOCAL (hoyLocalISO(), no toISOString()) que ya se usa en
+ * DashboardView para "Facturado hoy", duplicado aquí a propósito: es
+ * una función de 6 líneas sin estado, y crear un util compartido solo
+ * para esto hubiera significado tocar también DashboardView sin
+ * necesidad real.
+ *
+ * EXPORTAR A EXCEL: reutiliza descargarExcel()/nombreArchivoConFecha()
+ * de utils/exportar.js — el mismo generador 100% en el navegador que ya
+ * usa Reportes (cero endpoints nuevos). La exportación de acá NO
+ * reutiliza las columnas de TIPOS_REPORTE.ventas (reportesService.js):
+ * esas no tienen "Categorías" ni "Sucursal", porque ese reporte es una
+ * herramienta distinta (exportación histórica completa). Este botón
+ * exporta exactamente lo que la tabla está mostrando en este momento —
+ * usa 'visibles' directo, así que respeta cualquier combinación de
+ * filtros activos (estado, categoría, fecha) sin lógica adicional.
  * ==========================================================================*/
 
 const ESTADO_SIGUIENTE = {
@@ -110,6 +135,18 @@ function categoriasDeVenta(venta) {
     if (d.producto?.categoria) mapa.set(d.producto.categoria.id_categoria, d.producto.categoria);
   });
   return [...mapa.values()];
+}
+
+// Fecha LOCAL (no UTC) en formato YYYY-MM-DD, para la tarjeta "Ventas de
+// hoy". Mismo criterio y misma implementación que hoyLocalISO() en
+// DashboardView.jsx — ver nota de cabecera sobre por qué está duplicada
+// en vez de compartida.
+function hoyLocalISO() {
+  const ahora = new Date();
+  const anio = ahora.getFullYear();
+  const mes = String(ahora.getMonth() + 1).padStart(2, "0");
+  const dia = String(ahora.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
 }
 
 function formatFecha(iso) {
@@ -450,7 +487,6 @@ export default function VentasView() {
   useEffect(() => {
     cargarDatos();
   }, [cargarDatos]);
-  
 
   // Solo categorías que realmente aparecen en al menos una venta visible
   // para este actor — evitar mostrar una categoría en el filtro que no
@@ -473,15 +509,21 @@ export default function VentasView() {
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [ventas, actor, sucursales, filtroEstado, filtroCategoria, desde, hasta]);
 
+  // Las 4 tarjetas de arriba se calculan sobre 'visibles' (YA filtrado
+  // por estado/categoría/fecha) a propósito: si filtras por 'pendiente',
+  // que "Total vendido" caiga a $0 es correcto — refleja lo que estás
+  // viendo, no el histórico completo. "hoy" es un recorte ADICIONAL por
+  // fecha local, encima de cualquier filtro que ya esté activo.
   const stats = useMemo(() => {
-    const base = ventas.filter((v) => ventaVisible(actor, v, sucursales));
-    const facturables = base.filter((v) => ["pagado", "entregado"].includes(v.estado));
+    const hoy = hoyLocalISO();
+    const facturables = visibles.filter((v) => ["pagado", "entregado"].includes(v.estado));
     return {
-      total: base.length,
-      pendientes: base.filter((v) => !["pagado", "entregado", "cancelado"].includes(v.estado)).length,
+      total: visibles.length,
+      pendientes: visibles.filter((v) => !["pagado", "entregado", "cancelado"].includes(v.estado)).length,
       vendido: facturables.reduce((sum, v) => sum + Number(v.total), 0),
+      hoy: visibles.filter((v) => v.created_at?.slice(0, 10) === hoy).length,
     };
-  }, [ventas, actor, sucursales]);
+  }, [visibles]);
 
   // Columnas reales de la tabla: 8 para admin_general (incluye
   // "Sucursal"), 7 para admin_sucursal/cajero. Antes de agregar
@@ -500,8 +542,6 @@ export default function VentasView() {
     if (!siguiente) return;
     setProcesando(true);
     try {
-      // El backend descuenta inventario/factura solo al llegar a 'pagado'
-      // (ver NuevaVentaView) — aquí solo reflejamos el cambio de estado.
       await api.patch(`/ventas/${venta.id_venta}/estado`, { estado: siguiente });
       showToast(`Venta #${venta.id_venta} → ${ESTADO_LABEL[siguiente]}`);
       await cargarDatos();
@@ -540,6 +580,35 @@ export default function VentasView() {
     }
   }
 
+  // Exporta exactamente lo que la tabla está mostrando ahora mismo
+  // (visibles), así que respeta cualquier combinación de filtros
+  // activos sin necesitar lógica aparte. Reutiliza descargarExcel() de
+  // utils/exportar.js — el mismo generador 100% en el navegador de
+  // Reportes (cero endpoints nuevos en Laravel).
+  function exportarExcel() {
+    if (visibles.length === 0) {
+      showToast("No hay ventas para exportar con este filtro.");
+      return;
+    }
+
+    const columnas = [
+      { header: "Venta #", accessor: (f) => f.id_venta },
+      { header: "Fecha", accessor: (f) => formatFecha(f.created_at) },
+      { header: "Categorías", accessor: (f) => categoriasDeVenta(f).map((c) => c.nombre).join(", ") || "—" },
+      ...(actorEsAdminGeneral(actor) ? [{ header: "Sucursal", accessor: (f) => f.sucursal?.nombre ?? "—" }] : []),
+      { header: "Cajero", accessor: (f) => f.cajero?.nombre ?? "—" },
+      { header: "Estado", accessor: (f) => ESTADO_LABEL[f.estado] ?? f.estado },
+      { header: "Total", accessor: (f) => formatMoney(f.total) },
+    ];
+
+    descargarExcel({
+      nombreArchivo: `${nombreArchivoConFecha("ventas", actorEsAdminGeneral(actor) ? null : actor.sucursal)}.xlsx`,
+      hojaNombre: "Ventas",
+      columnas,
+      datos: visibles,
+    });
+  }
+
   return (
     <div>
       <div className="breadcrumb">› Ventas</div>
@@ -551,6 +620,9 @@ export default function VentasView() {
             Las ventas se crean desde "Nueva venta" — aquí se hace seguimiento y cambio de estado.
           </p>
         </div>
+        <button className="btn btn-outline" onClick={exportarExcel} disabled={cargando || visibles.length === 0}>
+          <FileSpreadsheet size={16} /> Exportar a Excel
+        </button>
       </div>
 
       <div className="vv-stats">
@@ -561,6 +633,10 @@ export default function VentasView() {
         <div className="stat-card">
           <div className="stat-label">En curso</div>
           <div className={`stat-value${stats.pendientes > 0 ? " u-value-warning" : ""}`}>{stats.pendientes}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Ventas de hoy</div>
+          <div className="stat-value">{stats.hoy}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Total vendido (pagado + entregado)</div>
