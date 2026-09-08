@@ -56,18 +56,32 @@ import "../styles/VentasView.css";
  * necesitar una rama de código distinta por rol.
  *
  * KPIs REACTIVOS A LOS FILTROS (agregado 2026): "Ventas", "En curso" y
- * "Total vendido" ahora se calculan sobre 'visibles' (ya filtrado por
+ * "Vendido hoy" se calculan sobre 'visibles' (ya filtrado por
  * estado/categoría/fecha) en vez de sobre el total sin filtrar. Esto es
- * intencional: si filtras por estado 'pendiente', que "Total vendido"
+ * intencional: si filtras por estado 'pendiente', que "Vendido hoy"
  * muestre $0 es correcto — dentro de lo que estás viendo, no hay nada
- * pagado. "Ventas de hoy" es una tarjeta nueva que aplica esos mismos
- * filtros y ADEMÁS recorta a la fecha de HOY (independiente de si hay
- * un rango 'desde'/'hasta' distinto seleccionado) — mismo criterio de
- * fecha LOCAL (hoyLocalISO(), no toISOString()) que ya se usa en
- * DashboardView para "Facturado hoy", duplicado aquí a propósito: es
- * una función de 6 líneas sin estado, y crear un util compartido solo
- * para esto hubiera significado tocar también DashboardView sin
- * necesidad real.
+ * pagado. "Ventas de hoy" y "Vendido hoy" recortan ADEMÁS a la fecha de
+ * HOY (independiente de si hay un rango 'desde'/'hasta' distinto
+ * seleccionado) — mismo criterio de fecha LOCAL (hoyLocalISO(), no
+ * toISOString()) que ya se usa en DashboardView para "Facturado hoy",
+ * duplicado aquí a propósito: es una función de 6 líneas sin estado, y
+ * crear un util compartido solo para esto hubiera significado tocar
+ * también DashboardView sin necesidad real.
+ *
+ * "VENDIDO HOY" reemplaza a "Total vendido" (cambio 2026): la tarjeta
+ * anterior sumaba TODO lo pagado/entregado dentro de 'visibles' sin
+ * límite de fecha — con meses de uso, ese número solo crece y deja de
+ * decir nada útil de un vistazo (mismo problema, y misma solución, que
+ * "Facturado hoy" ya resolvió en el Dashboard). El histórico completo
+ * sigue disponible filtrando por fecha en esta misma tabla, o en
+ * Reportes → Ventas.
+ *
+ * DESGLOSE "ÚLTIMOS 7 DÍAS" (agregado 2026): tarjeta nueva debajo de
+ * las 4 de arriba, con el monto vendido (pagado+entregado) de cada uno
+ * de los últimos 7 días — mismo dataset ('visibles'), sin pedir nada
+ * nuevo al backend. Es un complemento a "Vendido hoy", no un
+ * reemplazo: "hoy" para el vistazo inmediato, el desglose para ver si
+ * hoy fue un día normal o una anomalía frente al resto de la semana.
  *
  * EXPORTAR A EXCEL: reutiliza descargarExcel()/nombreArchivoConFecha()
  * de utils/exportar.js — el mismo generador 100% en el navegador que ya
@@ -86,6 +100,10 @@ const ESTADO_SIGUIENTE = {
   listo_para_entregar: "pagado",
   pagado: "entregado",
 };
+
+// Cantidad de días que cubre la tarjeta "Vendido — últimos N días"
+// (incluye hoy). Confirmado con el equipo: 7 días.
+const DIAS_DESGLOSE = 7;
 
 const ESTADO_LABEL = {
   pendiente: "Pendiente",
@@ -151,16 +169,21 @@ function productosDeVenta(venta) {
     .join(", ") || "—";
 }
 
-// Fecha LOCAL (no UTC) en formato YYYY-MM-DD, para la tarjeta "Ventas de
-// hoy". Mismo criterio y misma implementación que hoyLocalISO() en
-// DashboardView.jsx — ver nota de cabecera sobre por qué está duplicada
-// en vez de compartida.
-function hoyLocalISO() {
-  const ahora = new Date();
-  const anio = ahora.getFullYear();
-  const mes = String(ahora.getMonth() + 1).padStart(2, "0");
-  const dia = String(ahora.getDate()).padStart(2, "0");
+// Fecha LOCAL (no UTC) de un Date dado, en formato YYYY-MM-DD. Mismo
+// criterio y misma implementación que fechaLocalISO() en
+// DashboardView.jsx (ver nota de cabecera sobre por qué está duplicada
+// en vez de compartida) — generalizada acá desde la hoyLocalISO()
+// original para poder reutilizarla también en el desglose de "últimos
+// 7 días" (necesita la fecha de cada uno de esos días, no solo la de hoy).
+function fechaLocalISO(date) {
+  const anio = date.getFullYear();
+  const mes = String(date.getMonth() + 1).padStart(2, "0");
+  const dia = String(date.getDate()).padStart(2, "0");
   return `${anio}-${mes}-${dia}`;
+}
+
+function hoyLocalISO() {
+  return fechaLocalISO(new Date());
 }
 
 function formatFecha(iso) {
@@ -523,9 +546,9 @@ export default function VentasView() {
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [ventas, actor, sucursales, filtroEstado, filtroCategoria, desde, hasta]);
 
-  // Las 4 tarjetas de arriba se calculan sobre 'visibles' (YA filtrado
+  // Las tarjetas de arriba se calculan sobre 'visibles' (YA filtrado
   // por estado/categoría/fecha) a propósito: si filtras por 'pendiente',
-  // que "Total vendido" caiga a $0 es correcto — refleja lo que estás
+  // que "Vendido hoy" caiga a $0 es correcto — refleja lo que estás
   // viendo, no el histórico completo. "hoy" es un recorte ADICIONAL por
   // fecha local, encima de cualquier filtro que ya esté activo.
   const stats = useMemo(() => {
@@ -534,9 +557,39 @@ export default function VentasView() {
     return {
       total: visibles.length,
       pendientes: visibles.filter((v) => !["pagado", "entregado", "cancelado"].includes(v.estado)).length,
-      vendido: facturables.reduce((sum, v) => sum + Number(v.total), 0),
       hoy: visibles.filter((v) => v.created_at?.slice(0, 10) === hoy).length,
+      vendidoHoy: facturables
+        .filter((v) => v.created_at?.slice(0, 10) === hoy)
+        .reduce((sum, v) => sum + Number(v.total), 0),
     };
+  }, [visibles]);
+
+  // Desglose de dinero vendido por día, para los últimos DIAS_DESGLOSE
+  // días (incluyendo hoy) — reemplaza a "Total vendido", que sumaba
+  // TODO el histórico visible sin límite de fecha y solo crecía con el
+  // tiempo. Mismo criterio que 'stats.vendidoHoy': solo pagado/entregado,
+  // sobre 'visibles' (ya filtrado por estado/categoría/fecha de esta
+  // pantalla) — así que si filtras por categoría, el desglose también
+  // se ajusta a esa categoría, igual que el resto de las tarjetas.
+  const ultimosDias = useMemo(() => {
+    const facturables = visibles.filter((v) => ["pagado", "entregado"].includes(v.estado));
+    const hoyIso = hoyLocalISO();
+    const dias = [];
+    for (let i = DIAS_DESGLOSE - 1; i >= 0; i--) {
+      const fecha = new Date();
+      fecha.setDate(fecha.getDate() - i);
+      const iso = fechaLocalISO(fecha);
+      const total = facturables
+        .filter((v) => v.created_at?.slice(0, 10) === iso)
+        .reduce((sum, v) => sum + Number(v.total), 0);
+      dias.push({
+        iso,
+        esHoy: iso === hoyIso,
+        etiqueta: iso === hoyIso ? "Hoy" : fecha.toLocaleDateString("es-CO", { weekday: "short", day: "2-digit", month: "short" }),
+        total,
+      });
+    }
+    return dias;
   }, [visibles]);
 
   // Columnas reales de la tabla: 8 para admin_general (incluye
@@ -658,9 +711,19 @@ export default function VentasView() {
           <div className="stat-value">{stats.hoy}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Total vendido (pagado + entregado)</div>
-          <div className="stat-value">{formatMoney(stats.vendido)}</div>
+          <div className="stat-label">Vendido hoy (pagado + entregado)</div>
+          <div className="stat-value">{formatMoney(stats.vendidoHoy)}</div>
         </div>
+      </div>
+
+      <div className="vv-ultimos-dias">
+        <h3 className="vv-ultimos-dias-title">Vendido — últimos {DIAS_DESGLOSE} días</h3>
+        {ultimosDias.map((d) => (
+          <div className={`vv-dia-row${d.esHoy ? " vv-dia-hoy" : ""}`} key={d.iso}>
+            <span>{d.etiqueta}</span>
+            <span className="text-mono">{formatMoney(d.total)}</span>
+          </div>
+        ))}
       </div>
 
       <div className="vv-toolbar">

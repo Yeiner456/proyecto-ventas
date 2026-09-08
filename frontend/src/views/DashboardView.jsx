@@ -68,6 +68,23 @@ import "../styles/DashboardView.css";
  *   'Ventas registradas' y 'En curso' NO cambiaron: siguen siendo
  *   conteos de estado/histórico, no montos de dinero, y no fueron parte
  *   de la queja reportada.
+ *
+ * "PRODUCTOS MÁS VENDIDOS" (agregado 2026):
+ *   Tarjeta nueva, SOLO para cajero/admin_sucursal (admin_general no la
+ *   ve — pidió panorama por sucursal individual, no una mezcla de las
+ *   sucursales de todos). Rankea por UNIDADES vendidas (no por dinero)
+ *   de los últimos 7 días, contando solo ventas 'pagado'/'entregado'
+ *   (mismo criterio que 'vendido' en VentasView: una venta cancelada o
+ *   todavía pendiente no cuenta como "vendida").
+ *
+ *   Cero requests nuevos: 'ventas' ya se trae completo con
+ *   'detalles.producto.categoria' anidado (mismo GET /api/ventas que ya
+ *   usa esta pantalla), así que el conteo por producto se arma 100% en
+ *   memoria con un useMemo, igual que el resto del Dashboard. Para
+ *   cajero/admin_sucursal 'ventas' ya llega scoped a su propia sucursal
+ *   (FiltraPorSucursal), así que no hace falta ninguna lógica de rol
+ *   para el scoping de los datos — solo la condición de UI (!admin)
+ *   para decidir si se muestra la tarjeta.
  * ==========================================================================*/
 
 function formatMoney(n) {
@@ -99,6 +116,14 @@ const ESTADO_LABEL = {
   entregado: "Entregado",
   cancelado: "Cancelado",
 };
+
+// Cuántos productos muestra el ranking de "Productos más vendidos".
+// Confirmado con el equipo: Top 5, igual que "Ventas recientes".
+const TOP_PRODUCTOS = 5;
+
+// Ventana del ranking de "Productos más vendidos". Confirmado con el
+// equipo: últimos 7 días.
+const DIAS_RANKING_PRODUCTOS = 7;
 
 
 export default function DashboardView() {
@@ -179,6 +204,34 @@ export default function DashboardView() {
   }, [admin, sucursales, facturasHoy]);
 
   const ventasRecientes = [...ventas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
+
+  // Ranking de productos por unidades vendidas en los últimos
+  // DIAS_RANKING_PRODUCTOS días. Solo cuenta ventas 'pagado'/'entregado'
+  // — una venta pendiente o cancelada no representa unidades realmente
+  // vendidas. 'ventas' ya trae 'detalles.producto' anidado, así que no
+  // hace falta ningún request adicional (ver nota de cabecera).
+  const productosMasVendidos = useMemo(() => {
+    const corte = new Date();
+    corte.setDate(corte.getDate() - (DIAS_RANKING_PRODUCTOS - 1));
+    corte.setHours(0, 0, 0, 0);
+
+    const conteo = new Map(); // id_producto -> { id_producto, nombre, cantidad }
+
+    ventas
+      .filter((v) => ["pagado", "entregado"].includes(v.estado))
+      .filter((v) => new Date(v.created_at) >= corte)
+      .forEach((v) => {
+        (v.detalles ?? []).forEach((d) => {
+          const id = d.producto?.id_producto;
+          if (!id) return; // producto eliminado: no se puede rankear por nombre
+          const previo = conteo.get(id) ?? { id_producto: id, nombre: d.producto.nombre, cantidad: 0 };
+          previo.cantidad += Number(d.cantidad);
+          conteo.set(id, previo);
+        });
+      });
+
+    return [...conteo.values()].sort((a, b) => b.cantidad - a.cantidad).slice(0, TOP_PRODUCTOS);
+  }, [ventas]);
 
   return (
     <div>
@@ -263,6 +316,24 @@ export default function DashboardView() {
               ))
             )}
           </div>
+
+          {!admin && (
+            <div className="dv-card">
+              <div className="dv-card-header">
+                <h3 className="dv-card-title">Productos más vendidos — últimos {DIAS_RANKING_PRODUCTOS} días</h3>
+              </div>
+              {productosMasVendidos.length === 0 ? (
+                <div className="dv-empty">Todavía no hay ventas pagadas en los últimos {DIAS_RANKING_PRODUCTOS} días.</div>
+              ) : (
+                productosMasVendidos.map((p, i) => (
+                  <div className="dv-row" key={p.id_producto}>
+                    <span>{i + 1}. {p.nombre}</span>
+                    <span className="text-mono">{p.cantidad} uds.</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
           {stockBajo.length > 0 && (actor.rol === "admin_sucursal" || admin) && (
             <div className="dv-card">
