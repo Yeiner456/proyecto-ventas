@@ -137,6 +137,20 @@ function categoriasDeVenta(venta) {
   return [...mapa.values()];
 }
 
+// Texto resumido de los productos de una venta para la columna
+// "Productos" de "Exportar a Excel" — ej. "2× Café Americano, 1× Torta
+// de chocolate". Misma lógica que productosDeVenta() en
+// reportesService.js, duplicada a propósito (igual criterio que
+// categoriasDeVenta/categoriasUnicasDeVenta): es una función pura de
+// pocas líneas, y este botón exporta 'visibles' con los filtros
+// activos de esta pantalla, no el dataset histórico de Reportes — son
+// dos herramientas distintas aunque el texto que arman se parezca.
+function productosDeVenta(venta) {
+  return (venta.detalles ?? [])
+    .map((d) => `${d.cantidad}× ${d.producto?.nombre ?? "Producto eliminado"}`)
+    .join(", ") || "—";
+}
+
 // Fecha LOCAL (no UTC) en formato YYYY-MM-DD, para la tarjeta "Ventas de
 // hoy". Mismo criterio y misma implementación que hoyLocalISO() en
 // DashboardView.jsx — ver nota de cabecera sobre por qué está duplicada
@@ -595,9 +609,14 @@ export default function VentasView() {
       { header: "Venta #", accessor: (f) => f.id_venta },
       { header: "Fecha", accessor: (f) => formatFecha(f.created_at) },
       { header: "Categorías", accessor: (f) => categoriasDeVenta(f).map((c) => c.nombre).join(", ") || "—" },
+      { header: "Productos", accessor: productosDeVenta },
       ...(actorEsAdminGeneral(actor) ? [{ header: "Sucursal", accessor: (f) => f.sucursal?.nombre ?? "—" }] : []),
       { header: "Cajero", accessor: (f) => f.cajero?.nombre ?? "—" },
       { header: "Estado", accessor: (f) => ESTADO_LABEL[f.estado] ?? f.estado },
+      // 'comprobantes' llega en 'visibles' porque GET /api/ventas
+      // (VentaController::index) ahora lo trae eager-loaded — mismo
+      // cambio de backend hecho para esta misma función en Reportes.
+      { header: "Comprobante", accessor: (f) => ((f.comprobantes?.length ?? 0) > 0 ? "Sí" : "No") },
       { header: "Total", accessor: (f) => formatMoney(f.total) },
     ];
 

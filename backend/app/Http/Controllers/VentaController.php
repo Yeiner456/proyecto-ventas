@@ -39,7 +39,15 @@ class VentaController extends Controller
         // 'detalles.producto.categoria' (antes solo 'detalles.producto'):
         // el listado de Ventas ahora muestra y filtra por las categorías
         // de los productos de cada venta (ver VentasView.jsx).
-        $query = Venta::query()->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto.categoria']);
+        // 'comprobantes' (agregado 2026): Reportes → Ventas y el botón
+        // "Exportar a Excel" de VentasView ahora incluyen una columna
+        // "Comprobante" (Sí/No) — sin esta relación cargada aquí, cada
+        // fila necesitaría su propio GET /api/ventas/{id} para saberlo
+        // (N+1), rompiendo la idea de "una sola pasada" que ya usan los
+        // reportes masivos. Es una relación liviana (0 o 1 fila típico
+        // por venta), mismo criterio que ya se usó para agregar
+        // detalles.producto.categoria.
+        $query = Venta::query()->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto.categoria', 'comprobantes']);
 
         $this->aplicarFiltroSucursal($query);
 

@@ -50,20 +50,26 @@ import "../styles/ReportesView.css";
  * ventanas CORRIDAS de 7/30 días incluyendo hoy, no semana/mes
  * calendario — ver calcularRangoFecha() en reportesService.js.
  *
- * Filtro de categoría (agregado 2026): mismo criterio que el de fecha —
- * SOLO en la tarjeta de "Ventas", vive dentro de la propia tarjeta, y
- * ambos filtros se combinan (una venta debe cumplir fecha Y categoría
- * para exportarse). Las categorías disponibles salen de GET
- * /api/categorias-productos, cargadas una sola vez al montar la vista.
+ * Filtro de categoría (agregado 2026, extendido a "Productos" después):
+ * vive dentro de cada tarjeta que lo soporta ("Ventas" y "Productos"),
+ * y en la de Ventas se combina con el de fecha (una venta debe cumplir
+ * fecha Y categoría para exportarse). Las categorías disponibles salen
+ * de GET /api/categorias-productos, cargadas una sola vez al montar la
+ * vista, y esa LISTA de opciones es la misma para ambas tarjetas — pero
+ * la SELECCIÓN es independiente ('categoriaId' para Ventas,
+ * 'categoriaIdProductos' para Productos) para que descargar un reporte
+ * filtrado en una tarjeta no deje "pegado" ese mismo filtro en la otra
+ * sin que el usuario lo note.
+ *
  * Para admin_general se filtran en el navegador por la sucursal elegida
  * en el picker de arriba (mismo motivo que el picker de sucursal: ese
  * endpoint le devuelve TODAS las categorías de TODAS las sucursales
  * mezcladas) — por eso el selector de categoría está deshabilitado
  * hasta que admin_general elige una sucursal. Para admin_sucursal el
  * backend ya le devuelve solo las suyas, así que se usan directo.
- * Cuando cambia la sucursal elegida se resetea 'categoriaId': una
- * categoría de la sucursal anterior ya no tiene sentido (ni existe como
- * <option>) en la nueva.
+ * Cuando cambia la sucursal elegida se resetean AMBAS selecciones de
+ * categoría: una categoría de la sucursal anterior ya no tiene sentido
+ * (ni existe como <option>) en la nueva.
  *
  * Generación de archivos: 100% en el navegador (ver utils/exportar.js).
  * Decisión tomada junto con el equipo el 2026-07-09: cero endpoints
@@ -104,11 +110,13 @@ export default function ReportesView() {
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
 
-  // Filtro de categoría — también solo para "ventas". Vacío = "todas".
+  // Filtro de categoría — selección independiente por tarjeta (ver nota
+  // de cabecera). Vacío = "todas".
   const [categorias, setCategorias] = useState([]);
   const [cargandoCategorias, setCargandoCategorias] = useState(true);
   const [errorCategorias, setErrorCategorias] = useState(null);
-  const [categoriaId, setCategoriaId] = useState("");
+  const [categoriaId, setCategoriaId] = useState(""); // tarjeta "Ventas"
+  const [categoriaIdProductos, setCategoriaIdProductos] = useState(""); // tarjeta "Productos"
 
   // Solo admin_general necesita el selector; admin_sucursal ni siquiera
   // pide esta lista.
@@ -195,9 +203,11 @@ export default function ReportesView() {
   function handleSucursalChange(value) {
     setSucursalId(value);
     // Una categoría de la sucursal anterior no tiene sentido (ni existe
-    // como <option>) en la nueva — se resetea para no exportar con un
-    // filtro de categoría "fantasma" que el usuario ya no ve seleccionado.
+    // como <option>) en la nueva — se resetean AMBAS para no exportar
+    // con un filtro de categoría "fantasma" que el usuario ya no ve
+    // seleccionado en ninguna de las dos tarjetas.
     setCategoriaId("");
+    setCategoriaIdProductos("");
   }
 
   const manejarDescarga = useCallback(
@@ -209,7 +219,11 @@ export default function ReportesView() {
       try {
         const filtroSucursal = admin ? Number(sucursalId) : null;
         const filtroFecha = tipo.id === "ventas" ? rangoFecha : null;
-        const filtroCategoria = tipo.id === "ventas" && categoriaId ? Number(categoriaId) : null;
+        // Cada tarjeta lee su propia selección — ver nota de cabecera
+        // sobre por qué categoriaId/categoriaIdProductos están separados.
+        const categoriaIdParaTipo =
+          tipo.id === "ventas" ? categoriaId : tipo.id === "productos" ? categoriaIdProductos : "";
+        const filtroCategoria = categoriaIdParaTipo ? Number(categoriaIdParaTipo) : null;
         const filas = await obtenerDatosReporte(tipo, filtroSucursal, filtroFecha, filtroCategoria);
 
         if (filas.length === 0) {
@@ -259,7 +273,7 @@ export default function ReportesView() {
         setEstadoBoton((prev) => ({ ...prev, [clave]: false }));
       }
     },
-    [admin, sucursalId, nombreSucursalActual, rangoFecha, presetFecha, categoriaId, categoriasDisponibles]
+    [admin, sucursalId, nombreSucursalActual, rangoFecha, presetFecha, categoriaId, categoriaIdProductos, categoriasDisponibles]
   );
 
   if (!puedeVer(actor)) {
@@ -336,7 +350,12 @@ export default function ReportesView() {
           const cargandoPDF = estadoBoton[`${tipo.id}-pdf`];
           const error = errorPorTipo[tipo.id];
           const esVentas = tipo.id === "ventas";
+          const esProductos = tipo.id === "productos";
           const bloqueadoPorFecha = esVentas && fechaVentasIncompleta;
+          // Filtro de fecha: SOLO Ventas (es el único con fecha de
+          // negocio relevante). Filtro de categoría: Ventas Y Productos.
+          const categoriaIdActual = esVentas ? categoriaId : categoriaIdProductos;
+          const setCategoriaIdActual = esVentas ? setCategoriaId : setCategoriaIdProductos;
 
           return (
             <div className="rv-card" key={tipo.id}>
@@ -406,17 +425,17 @@ export default function ReportesView() {
                 </div>
               )}
 
-              {esVentas && (
+              {(esVentas || esProductos) && (
                 <div className="rv-filtro-fecha">
-                  <label className="field-label rv-filtro-fecha-label" htmlFor="rv-categoria">
+                  <label className="field-label rv-filtro-fecha-label" htmlFor={`rv-categoria-${tipo.id}`}>
                     <Tags size={13} className="u-icon-inline" />
                     Filtrar por categoría
                   </label>
                   <select
-                    id="rv-categoria"
+                    id={`rv-categoria-${tipo.id}`}
                     className="field-select rv-select-sm"
-                    value={categoriaId}
-                    onChange={(e) => setCategoriaId(e.target.value)}
+                    value={categoriaIdActual}
+                    onChange={(e) => setCategoriaIdActual(e.target.value)}
                     disabled={admin && !sucursalId}
                   >
                     <option value="">Todas las categorías</option>
