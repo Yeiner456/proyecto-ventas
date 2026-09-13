@@ -134,12 +134,23 @@ export const api = {
   // debe fijar Content-Type a mano (el navegador pone el boundary del
   // multipart automáticamente) ni serializar el body con JSON.stringify.
   uploadFile: (path, formData) => requestFormData(path, formData),
-  // Trae TODAS las páginas de un endpoint paginado por Laravel (paginate()),
-  // que siempre responde { data: [...], meta: { last_page, ... } }. Las
-  // vistas de catálogo (roles, sucursales, categorías, métodos de pago...)
-  // necesitan el listado completo para selects/tablas simples, no una sola
-  // página de 15 — paginar de verdad solo tiene sentido en listados grandes
-  // como Ventas o Auditoría, que sí controlan su propia página desde la UI.
+  // Trae TODAS las páginas de un endpoint paginado por Laravel (paginate()).
+  // Las vistas de catálogo (roles, sucursales, categorías, métodos de
+  // pago...) necesitan el listado completo para selects/tablas simples,
+  // no una sola página de 15 — paginar de verdad solo tiene sentido en
+  // listados grandes como Ventas o Auditoría, que sí controlan su propia
+  // página desde la UI.
+  //
+  // OJO (corregido 2026-09-13): response()->json($paginator) en Laravel
+  // serializa el paginador CRUDO, cuyo 'last_page' vive en la RAÍZ del
+  // JSON (current_page, data, last_page, per_page, total, ...) — NO bajo
+  // una clave 'meta' anidada. Ese formato { data, links, meta } es el que
+  // producen los API Resources (Resource::collection()), que este
+  // proyecto no usa. Leer 'respuesta.meta?.last_page' hacía que
+  // ultimaPagina cayera siempre al fallback '?? 1', cortando el loop
+  // después de la página 1 — por eso Ventas/Dashboard solo mostraban el
+  // bloque más reciente de registros (~200) aunque hubiera muchos más en
+  // la base de datos.
   getAllPages: (path, perPage = 200) => obtenerTodasLasPaginas(path, perPage),
 };
 
@@ -152,7 +163,7 @@ async function obtenerTodasLasPaginas(path, perPage) {
   do {
     const respuesta = await request(`${path}${separador}page=${pagina}&per_page=${perPage}`);
     acumulado.push(...(respuesta.data ?? []));
-    ultimaPagina = respuesta.meta?.last_page ?? 1;
+    ultimaPagina = respuesta.last_page ?? 1;
     pagina++;
   } while (pagina <= ultimaPagina);
 

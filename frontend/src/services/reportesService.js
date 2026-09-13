@@ -40,7 +40,7 @@ import { api } from "./apiClient";
  *   aquí mismo. "Última semana"/"último mes" son ventanas CORRIDAS de
  *   7/30 días incluyendo el día de hoy, no semana/mes calendario.
  *
- * Filtro por categoría — "ventas" (agregado 2026):
+ * Filtro por categoría (agregado 2026, SOLO para "ventas"):
  *   Mismo criterio que fecha y sucursal: se filtra en el navegador, sin
  *   tocar el backend (VentaController::index() ya trae
  *   'detalles.producto.categoria' anidado desde que se agregó el filtro
@@ -56,30 +56,6 @@ import { api } from "./apiClient";
  *   servicio importe algo desde un archivo de vista, invirtiendo la
  *   dependencia esperada (services no deberían depender de views).
  *
- * Filtro por categoría — "productos" (agregado 2026):
- *   Un producto pertenece a UNA sola categoría (fila.categoria), a
- *   diferencia de una venta — por eso este tipo usa 'categoriaDe(fila)'
- *   (singular, devuelve un valor o null), no 'categoriasDe'. Son dos
- *   nombres de campo distintos a propósito: si algún día "productos"
- *   necesitara agrupar por varias categorías, mezclar ambos casos bajo
- *   el mismo nombre de campo obligaría a que TODO el código de filtrado
- *   supiera manejar "a veces es un array, a veces un valor", que es
- *   justo el tipo de rama silenciosa que se presta a bugs. Ver
- *   obtenerDatosReporte() más abajo para cómo se combinan ambos casos.
- *
- * Columnas "Productos" y "Comprobante" en el reporte de "ventas"
- * (agregado 2026): igual que "Categorías", son texto resumido en una
- * sola celda — no una fila por producto — porque este reporte sigue
- * siendo "una fila = una venta". 'productosDeVenta()' arma el texto
- * "2× Café Americano, 1× Torta de chocolate"; 'comprobantes' viene
- * eager-loaded desde VentaController::index() (agregado junto con este
- * cambio) para poder mostrar Sí/No sin una petición extra por fila.
- * Si en algún momento se necesita el comprobante real (la imagen o el
- * archivo, no solo si existe), ese detalle ya está cubierto por el PDF
- * individual de una factura (descargarFacturaPDF() en utils/exportar.js)
- * y por los modales de detalle — este reporte masivo solo indica
- * presencia/ausencia, igual que "Activo" en el reporte de productos.
- *
  * Si en el futuro el volumen de datos crece y este "traer todo y filtrar
  * en el navegador" pesa demasiado, la mejora natural es agregar soporte a
  * '?sucursal_id=' y '?desde=/?hasta=' en los controllers (un cambio
@@ -90,8 +66,14 @@ const TAMANO_PAGINA = 200;
 
 /**
  * Trae TODAS las páginas de un endpoint paginado por Laravel (paginate()).
- * Los 4 endpoints que usa Reportes devuelven siempre la forma estándar
- * { data: [...], meta: { last_page, ... } }.
+ *
+ * OJO (corregido 2026-09-13): response()->json($paginator) serializa el
+ * paginador CRUDO de Laravel, con 'last_page' en la RAÍZ del JSON
+ * (current_page, data, last_page, per_page, total, ...), no bajo una
+ * clave 'meta' anidada — ese formato { data, links, meta } es el de los
+ * API Resources, que este proyecto no usa. Esta función (y su gemela en
+ * apiClient.js) leían 'respuesta.meta?.last_page', que siempre caía al
+ * fallback '?? 1' y cortaba el loop tras la primera página.
  */
 async function obtenerTodasLasPaginas(endpoint) {
   const acumulado = [];
@@ -101,7 +83,7 @@ async function obtenerTodasLasPaginas(endpoint) {
   do {
     const respuesta = await api.get(`${endpoint}?page=${pagina}&per_page=${TAMANO_PAGINA}`);
     acumulado.push(...(respuesta.data ?? []));
-    ultimaPagina = respuesta.meta?.last_page ?? 1;
+    ultimaPagina = respuesta.last_page ?? 1;
     pagina++;
   } while (pagina <= ultimaPagina);
 
@@ -137,19 +119,6 @@ function categoriasUnicasDeVenta(fila) {
   return [...mapa.values()];
 }
 
-// Texto resumido de los productos de una venta, para la columna
-// "Productos" del reporte — ej. "2× Café Americano, 1× Torta de
-// chocolate". No deduplica por producto (a diferencia de las
-// categorías): si la misma venta tuviera dos líneas del mismo producto
-// (ej. dos ajustes de precio distintos), ambas deben verse por
-// separado, porque cada línea es un precio_unitario_venta potencialmente
-// distinto.
-function productosDeVenta(fila) {
-  return (fila.detalles ?? [])
-    .map((d) => `${d.cantidad}× ${d.producto?.nombre ?? "Producto eliminado"}`)
-    .join(", ") || "—";
-}
-
 /**
  * Un tipo de reporte = un recurso exportable.
  *   endpoint     -> de dónde se trae el dataset completo
@@ -171,9 +140,6 @@ export const TIPOS_REPORTE = [
     descripcion: "Catálogo de productos con precio, stock y estado.",
     endpoint: "/productos",
     sucursalDe: (fila) => fila.sucursal_id,
-    // Singular (no array): un producto pertenece a UNA sola categoría.
-    // Ver nota de cabecera "Filtro por categoría — productos".
-    categoriaDe: (fila) => fila.categoria?.id_categoria ?? null,
     columnas: [
       { header: "Producto", accessor: (f) => f.nombre },
       { header: "Categoría", accessor: (f) => f.categoria?.nombre ?? "Sin categoría" },
@@ -209,17 +175,9 @@ export const TIPOS_REPORTE = [
       { header: "Venta #", accessor: (f) => f.id_venta },
       { header: "Fecha", accessor: (f) => formatoFecha(f.created_at) },
       { header: "Categorías", accessor: (f) => categoriasUnicasDeVenta(f).map((c) => c.nombre).join(", ") || "—" },
-      { header: "Productos", accessor: productosDeVenta },
       { header: "Cajero", accessor: (f) => f.cajero?.nombre ?? "—" },
       { header: "Estado", accessor: (f) => ESTADO_VENTA_LABEL[f.estado] ?? f.estado },
-      // OJO: metodoPago() es el nombre del método de relación en el
-      // modelo Eloquent, pero se serializa como 'metodo_pago' (Eloquent
-      // convierte las relaciones a snake_case en el JSON) — mismo punto
-      // que ya documenta VentasView.jsx. Estaba mal como 'f.metodoPago'
-      // (undefined siempre), así que esta columna venía mostrando "—"
-      // para TODAS las ventas exportadas; se corrige de paso.
-      { header: "Método de pago", accessor: (f) => f.metodo_pago?.nombre ?? "—" },
-      { header: "Comprobante", accessor: (f) => ((f.comprobantes?.length ?? 0) > 0 ? "Sí" : "No") },
+      { header: "Método de pago", accessor: (f) => f.metodoPago?.nombre ?? "—" },
       { header: "Total", accessor: (f) => formatoMoneda(f.total) },
     ],
   },
@@ -322,16 +280,12 @@ export function describirRangoFecha(preset, rango) {
  *     Para tipos sin 'fechaDe' (hoy: productos, usuarios, inventario) se
  *     ignora sin error, así que es seguro pasar null siempre para ellos.
  *
- *   categoriaIdFiltro (number, o null) -> se combina con lo que el tipo
- *     traiga definido:
- *       - 'categoriasDe' (array; hoy: ventas) -> filtra las filas que
- *         tengan AL MENOS UN producto de esa categoría (.some(), no
- *         === , porque una venta puede tener varias categorías a la vez).
- *       - 'categoriaDe' (singular; hoy: productos) -> filtra por
- *         igualdad directa, porque un producto pertenece a una sola
- *         categoría.
- *     Para tipos sin ninguno de los dos (hoy: usuarios, inventario) se
- *     ignora sin error, igual que rangoFecha.
+ *   categoriaIdFiltro (number, o null) -> si se pasa Y el tipo trae
+ *     'categoriasDe', filtra las filas que tengan AL MENOS UN producto
+ *     de esa categoría (fila.categoriasDe() devuelve un ARRAY, no un
+ *     solo valor — por eso .some() y no ===). Para tipos sin
+ *     'categoriasDe' (hoy: productos, usuarios, inventario) se ignora
+ *     sin error, igual que rangoFecha.
  */
 export async function obtenerDatosReporte(tipo, sucursalIdFiltro, rangoFecha = null, categoriaIdFiltro = null) {
   let filas = await obtenerTodasLasPaginas(tipo.endpoint);
@@ -349,12 +303,8 @@ export async function obtenerDatosReporte(tipo, sucursalIdFiltro, rangoFecha = n
     });
   }
 
-  if (categoriaIdFiltro != null) {
-    if (tipo.categoriasDe) {
-      filas = filas.filter((fila) => tipo.categoriasDe(fila).some((c) => c.id_categoria === categoriaIdFiltro));
-    } else if (tipo.categoriaDe) {
-      filas = filas.filter((fila) => tipo.categoriaDe(fila) === categoriaIdFiltro);
-    }
+  if (categoriaIdFiltro != null && tipo.categoriasDe) {
+    filas = filas.filter((fila) => tipo.categoriasDe(fila).some((c) => c.id_categoria === categoriaIdFiltro));
   }
 
   return filas;
