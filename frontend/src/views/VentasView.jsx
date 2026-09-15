@@ -666,6 +666,7 @@ export default function VentasView() {
       ...(actorEsAdminGeneral(actor) ? [{ header: "Sucursal", accessor: (f) => f.sucursal?.nombre ?? "—" }] : []),
       { header: "Cajero", accessor: (f) => f.cajero?.nombre ?? "—" },
       { header: "Estado", accessor: (f) => ESTADO_LABEL[f.estado] ?? f.estado },
+      { header: "Referencia de pago", accessor: (f) => f.referencia_pago ?? "—" },
       // 'comprobantes' llega en 'visibles' porque GET /api/ventas
       // (VentaController::index) ahora lo trae eager-loaded — mismo
       // cambio de backend hecho para esta misma función en Reportes.
