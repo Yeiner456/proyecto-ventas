@@ -77,9 +77,8 @@ function SucursalCard({ sucursal, puedeEditar, onEdit, onDelete }) {
             <Pencil size={14} /> Editar
           </button>
           <button
-            className="btn btn-danger-ghost btn-sm"
-            onClick={() => onDelete(sucursal)}
-            className="u-ml-auto"
+          className="btn btn-danger-ghost btn-sm u-ml-auto"
+          onClick={() => onDelete(sucursal)}
           >
             <Trash2 size={14} />
           </button>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight, Loader2, Paperclip, ExternalLink } from "lucide-react";
+import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight, Loader2, Paperclip, ExternalLink, FileSpreadsheet } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError, comprobanteUrl } from "../services/apiClient";
+import { descargarExcel, nombreArchivoConFecha } from "../utils/exportar";
 import "../styles/VentasView.css";
 
 /* ============================================================================
@@ -35,11 +36,62 @@ import "../styles/VentasView.css";
  *     el rol — lo replico literal, incluso para admin_general.
  *
  * GET /api/ventas ya viene con TODO anidado (VentaController::index hace
- * ->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto'])), así
- * que no hace falta pedir /api/usuarios ni /api/metodos-pago aparte para
- * mostrar nombres. OJO con el nombre de la clave: Eloquent serializa las
- * relaciones camelCase en snake_case — la relación metodoPago() llega
- * como venta.metodo_pago, NO venta.metodoPago.
+ * ->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto.categoria'])),
+ * así que no hace falta pedir /api/usuarios, /api/metodos-pago ni
+ * /api/categorias-productos aparte para mostrar nombres. OJO con el
+ * nombre de la clave: Eloquent serializa las relaciones camelCase en
+ * snake_case — la relación metodoPago() llega como venta.metodo_pago,
+ * NO venta.metodoPago.
+ *
+ * CATEGORÍAS (columna + filtro, agregado 2026): una venta puede tener
+ * productos de VARIAS categorías a la vez (café + pastel en la misma
+ * venta), así que no existe "la categoría de una venta" — existen las
+ * categorías presentes en sus detalles. categoriasDeVenta() resuelve
+ * eso deduplicando por id_categoria. Las opciones del filtro salen de
+ * las propias ventas ya cargadas (categoriasDisponibles), no de un
+ * fetch aparte a /api/categorias-productos: así solo aparecen en el
+ * filtro categorías que de verdad tienen ventas asociadas, y funciona
+ * igual para admin_general (todas las sucursales) que para
+ * admin_sucursal/cajero (ya vienen scoped por FiltraPorSucursal), sin
+ * necesitar una rama de código distinta por rol.
+ *
+ * KPIs REACTIVOS A LOS FILTROS (agregado 2026): "Ventas", "En curso" y
+ * "Vendido hoy" se calculan sobre 'visibles' (ya filtrado por
+ * estado/categoría/fecha) en vez de sobre el total sin filtrar. Esto es
+ * intencional: si filtras por estado 'pendiente', que "Vendido hoy"
+ * muestre $0 es correcto — dentro de lo que estás viendo, no hay nada
+ * pagado. "Ventas de hoy" y "Vendido hoy" recortan ADEMÁS a la fecha de
+ * HOY (independiente de si hay un rango 'desde'/'hasta' distinto
+ * seleccionado) — mismo criterio de fecha LOCAL (hoyLocalISO(), no
+ * toISOString()) que ya se usa en DashboardView para "Facturado hoy",
+ * duplicado aquí a propósito: es una función de 6 líneas sin estado, y
+ * crear un util compartido solo para esto hubiera significado tocar
+ * también DashboardView sin necesidad real.
+ *
+ * "VENDIDO HOY" reemplaza a "Total vendido" (cambio 2026): la tarjeta
+ * anterior sumaba TODO lo pagado/entregado dentro de 'visibles' sin
+ * límite de fecha — con meses de uso, ese número solo crece y deja de
+ * decir nada útil de un vistazo (mismo problema, y misma solución, que
+ * "Facturado hoy" ya resolvió en el Dashboard). El histórico completo
+ * sigue disponible filtrando por fecha en esta misma tabla, o en
+ * Reportes → Ventas.
+ *
+ * DESGLOSE "ÚLTIMOS 7 DÍAS" (agregado 2026): tarjeta nueva debajo de
+ * las 4 de arriba, con el monto vendido (pagado+entregado) de cada uno
+ * de los últimos 7 días — mismo dataset ('visibles'), sin pedir nada
+ * nuevo al backend. Es un complemento a "Vendido hoy", no un
+ * reemplazo: "hoy" para el vistazo inmediato, el desglose para ver si
+ * hoy fue un día normal o una anomalía frente al resto de la semana.
+ *
+ * EXPORTAR A EXCEL: reutiliza descargarExcel()/nombreArchivoConFecha()
+ * de utils/exportar.js — el mismo generador 100% en el navegador que ya
+ * usa Reportes (cero endpoints nuevos). La exportación de acá NO
+ * reutiliza las columnas de TIPOS_REPORTE.ventas (reportesService.js):
+ * esas no tienen "Categorías" ni "Sucursal", porque ese reporte es una
+ * herramienta distinta (exportación histórica completa). Este botón
+ * exporta exactamente lo que la tabla está mostrando en este momento —
+ * usa 'visibles' directo, así que respeta cualquier combinación de
+ * filtros activos (estado, categoría, fecha) sin lógica adicional.
  * ==========================================================================*/
 
 const ESTADO_SIGUIENTE = {
@@ -48,6 +100,10 @@ const ESTADO_SIGUIENTE = {
   listo_para_entregar: "pagado",
   pagado: "entregado",
 };
+
+// Cantidad de días que cubre la tarjeta "Vendido — últimos N días"
+// (incluye hoy). Confirmado con el equipo: 7 días.
+const DIAS_DESGLOSE = 7;
 
 const ESTADO_LABEL = {
   pendiente: "Pendiente",
@@ -87,6 +143,49 @@ function puedeEliminar(actor, venta, sucursales) {
   return actor.rol === "admin_sucursal" && ventaVisible(actor, venta, sucursales);
 }
 
+// Una venta puede traer productos de varias categorías a la vez (ej. un
+// café + un pastel), así que esto devuelve la lista de categorías ÚNICAS
+// presentes en sus detalles — no una sola. Requiere que el backend haya
+// cargado 'detalles.producto.categoria' (ver VentaController::index/show).
+function categoriasDeVenta(venta) {
+  const mapa = new Map();
+  (venta.detalles ?? []).forEach((d) => {
+    if (d.producto?.categoria) mapa.set(d.producto.categoria.id_categoria, d.producto.categoria);
+  });
+  return [...mapa.values()];
+}
+
+// Texto resumido de los productos de una venta para la columna
+// "Productos" de "Exportar a Excel" — ej. "2× Café Americano, 1× Torta
+// de chocolate". Misma lógica que productosDeVenta() en
+// reportesService.js, duplicada a propósito (igual criterio que
+// categoriasDeVenta/categoriasUnicasDeVenta): es una función pura de
+// pocas líneas, y este botón exporta 'visibles' con los filtros
+// activos de esta pantalla, no el dataset histórico de Reportes — son
+// dos herramientas distintas aunque el texto que arman se parezca.
+function productosDeVenta(venta) {
+  return (venta.detalles ?? [])
+    .map((d) => `${d.cantidad}× ${d.producto?.nombre ?? "Producto eliminado"}`)
+    .join(", ") || "—";
+}
+
+// Fecha LOCAL (no UTC) de un Date dado, en formato YYYY-MM-DD. Mismo
+// criterio y misma implementación que fechaLocalISO() en
+// DashboardView.jsx (ver nota de cabecera sobre por qué está duplicada
+// en vez de compartida) — generalizada acá desde la hoyLocalISO()
+// original para poder reutilizarla también en el desglose de "últimos
+// 7 días" (necesita la fecha de cada uno de esos días, no solo la de hoy).
+function fechaLocalISO(date) {
+  const anio = date.getFullYear();
+  const mes = String(date.getMonth() + 1).padStart(2, "0");
+  const dia = String(date.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
+}
+
+function hoyLocalISO() {
+  return fechaLocalISO(new Date());
+}
+
 function formatFecha(iso) {
   return new Date(iso).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
 }
@@ -94,7 +193,6 @@ function formatFecha(iso) {
 function formatMoney(n) {
   return `$${Number(n).toLocaleString("es-CO")}`;
 }
-
 
 function CancelarModal({ venta, onCancel, onConfirm, procesando }) {
   const [motivo, setMotivo] = useState("");
@@ -158,9 +256,10 @@ const TAMANO_COMPROBANTE_MAXIMO = 5 * 1024 * 1024; // 5MB, igual que StoreCompro
 /* ----------------------------------------------------------------------------
  * AdjuntarComprobante — subir un comprobante de pago para una venta que
  * sigue 'pendiente', desde el detalle en Ventas (no desde el flujo de
- * cobro de NuevaVentaView). Pensado para admin_sucursal (ComprobantePagoPolicy
- * ya permite admin_sucursal || cajero || admin_general; aquí solo se expone
- * a admin_sucursal/admin_general porque es el caso que se pidió).
+ * cobro de NuevaVentaView). ComprobantePagoPolicy::create() permite
+ * admin_sucursal || cajero (admin_general entra por before()), así que
+ * se expone a los tres roles: el cajero no debería depender de un admin
+ * para adjuntar el comprobante de una venta que él mismo dejó pendiente.
  * -------------------------------------------------------------------------- */
 function AdjuntarComprobante({ ventaId, onSubido }) {
   const [archivo, setArchivo] = useState(null);
@@ -374,7 +473,7 @@ function DetalleModal({ venta: ventaInicial, actor, onClose }) {
           </div>
         )}
 
-        {!cargando && venta.estado === "pendiente" && (actor.rol === "admin_sucursal" || actorEsAdminGeneral(actor)) && (
+        {!cargando && venta.estado === "pendiente" && (actor.rol === "admin_sucursal" || actor.rol === "cajero" || actorEsAdminGeneral(actor)) && (
           <AdjuntarComprobante
             ventaId={venta.id_venta}
             onSubido={(nuevo) => setVenta((prev) => ({ ...prev, comprobantes: [nuevo, ...(prev.comprobantes ?? [])] }))}
@@ -396,6 +495,7 @@ export default function VentasView() {
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
   const [filtroEstado, setFiltroEstado] = useState("");
+  const [filtroCategoria, setFiltroCategoria] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [detalleVenta, setDetalleVenta] = useState(null);
@@ -425,24 +525,79 @@ export default function VentasView() {
     cargarDatos();
   }, [cargarDatos]);
 
+  // Solo categorías que realmente aparecen en al menos una venta visible
+  // para este actor — evitar mostrar una categoría en el filtro que no
+  // va a devolver ningún resultado.
+  const categoriasDisponibles = useMemo(() => {
+    const mapa = new Map();
+    ventas
+      .filter((v) => ventaVisible(actor, v, sucursales))
+      .forEach((v) => categoriasDeVenta(v).forEach((c) => mapa.set(c.id_categoria, c)));
+    return [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [ventas, actor, sucursales]);
+
   const visibles = useMemo(() => {
     return ventas
       .filter((v) => ventaVisible(actor, v, sucursales))
       .filter((v) => !filtroEstado || v.estado === filtroEstado)
+      .filter((v) => !filtroCategoria || categoriasDeVenta(v).some((c) => c.id_categoria === Number(filtroCategoria)))
       .filter((v) => !desde || v.created_at.slice(0, 10) >= desde)
       .filter((v) => !hasta || v.created_at.slice(0, 10) <= hasta)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [ventas, actor, sucursales, filtroEstado, desde, hasta]);
+  }, [ventas, actor, sucursales, filtroEstado, filtroCategoria, desde, hasta]);
 
+  // Las tarjetas de arriba se calculan sobre 'visibles' (YA filtrado
+  // por estado/categoría/fecha) a propósito: si filtras por 'pendiente',
+  // que "Vendido hoy" caiga a $0 es correcto — refleja lo que estás
+  // viendo, no el histórico completo. "hoy" es un recorte ADICIONAL por
+  // fecha local, encima de cualquier filtro que ya esté activo.
   const stats = useMemo(() => {
-    const base = ventas.filter((v) => ventaVisible(actor, v, sucursales));
-    const facturables = base.filter((v) => ["pagado", "entregado"].includes(v.estado));
+    const hoy = hoyLocalISO();
+    const facturables = visibles.filter((v) => ["pagado", "entregado"].includes(v.estado));
     return {
-      total: base.length,
-      pendientes: base.filter((v) => !["pagado", "entregado", "cancelado"].includes(v.estado)).length,
-      vendido: facturables.reduce((sum, v) => sum + Number(v.total), 0),
+      total: visibles.length,
+      pendientes: visibles.filter((v) => !["pagado", "entregado", "cancelado"].includes(v.estado)).length,
+      hoy: visibles.filter((v) => v.created_at?.slice(0, 10) === hoy).length,
+      vendidoHoy: facturables
+        .filter((v) => v.created_at?.slice(0, 10) === hoy)
+        .reduce((sum, v) => sum + Number(v.total), 0),
     };
-  }, [ventas, actor, sucursales]);
+  }, [visibles]);
+
+  // Desglose de dinero vendido por día, para los últimos DIAS_DESGLOSE
+  // días (incluyendo hoy) — reemplaza a "Total vendido", que sumaba
+  // TODO el histórico visible sin límite de fecha y solo crecía con el
+  // tiempo. Mismo criterio que 'stats.vendidoHoy': solo pagado/entregado,
+  // sobre 'visibles' (ya filtrado por estado/categoría/fecha de esta
+  // pantalla) — así que si filtras por categoría, el desglose también
+  // se ajusta a esa categoría, igual que el resto de las tarjetas.
+  const ultimosDias = useMemo(() => {
+    const facturables = visibles.filter((v) => ["pagado", "entregado"].includes(v.estado));
+    const hoyIso = hoyLocalISO();
+    const dias = [];
+    for (let i = DIAS_DESGLOSE - 1; i >= 0; i--) {
+      const fecha = new Date();
+      fecha.setDate(fecha.getDate() - i);
+      const iso = fechaLocalISO(fecha);
+      const total = facturables
+        .filter((v) => v.created_at?.slice(0, 10) === iso)
+        .reduce((sum, v) => sum + Number(v.total), 0);
+      dias.push({
+        iso,
+        esHoy: iso === hoyIso,
+        etiqueta: iso === hoyIso ? "Hoy" : fecha.toLocaleDateString("es-CO", { weekday: "short", day: "2-digit", month: "short" }),
+        total,
+      });
+    }
+    return dias;
+  }, [visibles]);
+
+  // Columnas reales de la tabla: 8 para admin_general (incluye
+  // "Sucursal"), 7 para admin_sucursal/cajero. Antes de agregar
+  // "Categorías" esto estaba fijo en 7 para ambos casos — inofensivo
+  // (colSpan de más no rompe nada) pero impreciso; se deja exacto ya
+  // que se está tocando esta misma tabla.
+  const numColumnas = actorEsAdminGeneral(actor) ? 8 : 7;
 
   function showToast(msg) {
     setToast(msg);
@@ -454,8 +609,6 @@ export default function VentasView() {
     if (!siguiente) return;
     setProcesando(true);
     try {
-      // El backend descuenta inventario/factura solo al llegar a 'pagado'
-      // (ver NuevaVentaView) — aquí solo reflejamos el cambio de estado.
       await api.patch(`/ventas/${venta.id_venta}/estado`, { estado: siguiente });
       showToast(`Venta #${venta.id_venta} → ${ESTADO_LABEL[siguiente]}`);
       await cargarDatos();
@@ -494,6 +647,40 @@ export default function VentasView() {
     }
   }
 
+  // Exporta exactamente lo que la tabla está mostrando ahora mismo
+  // (visibles), así que respeta cualquier combinación de filtros
+  // activos sin necesitar lógica aparte. Reutiliza descargarExcel() de
+  // utils/exportar.js — el mismo generador 100% en el navegador de
+  // Reportes (cero endpoints nuevos en Laravel).
+  function exportarExcel() {
+    if (visibles.length === 0) {
+      showToast("No hay ventas para exportar con este filtro.");
+      return;
+    }
+
+    const columnas = [
+      { header: "Venta #", accessor: (f) => f.id_venta },
+      { header: "Fecha", accessor: (f) => formatFecha(f.created_at) },
+      { header: "Categorías", accessor: (f) => categoriasDeVenta(f).map((c) => c.nombre).join(", ") || "—" },
+      { header: "Productos", accessor: productosDeVenta },
+      ...(actorEsAdminGeneral(actor) ? [{ header: "Sucursal", accessor: (f) => f.sucursal?.nombre ?? "—" }] : []),
+      { header: "Cajero", accessor: (f) => f.cajero?.nombre ?? "—" },
+      { header: "Estado", accessor: (f) => ESTADO_LABEL[f.estado] ?? f.estado },
+      // 'comprobantes' llega en 'visibles' porque GET /api/ventas
+      // (VentaController::index) ahora lo trae eager-loaded — mismo
+      // cambio de backend hecho para esta misma función en Reportes.
+      { header: "Comprobante", accessor: (f) => ((f.comprobantes?.length ?? 0) > 0 ? "Sí" : "No") },
+      { header: "Total", accessor: (f) => formatMoney(f.total) },
+    ];
+
+    descargarExcel({
+      nombreArchivo: `${nombreArchivoConFecha("ventas", actorEsAdminGeneral(actor) ? null : actor.sucursal)}.xlsx`,
+      hojaNombre: "Ventas",
+      columnas,
+      datos: visibles,
+    });
+  }
+
   return (
     <div>
       <div className="breadcrumb">› Ventas</div>
@@ -505,6 +692,9 @@ export default function VentasView() {
             Las ventas se crean desde "Nueva venta" — aquí se hace seguimiento y cambio de estado.
           </p>
         </div>
+        <button className="btn btn-outline" onClick={exportarExcel} disabled={cargando || visibles.length === 0}>
+          <FileSpreadsheet size={16} /> Exportar a Excel
+        </button>
       </div>
 
       <div className="vv-stats">
@@ -517,9 +707,23 @@ export default function VentasView() {
           <div className={`stat-value${stats.pendientes > 0 ? " u-value-warning" : ""}`}>{stats.pendientes}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Total vendido (pagado + entregado)</div>
-          <div className="stat-value">{formatMoney(stats.vendido)}</div>
+          <div className="stat-label">Ventas de hoy</div>
+          <div className="stat-value">{stats.hoy}</div>
         </div>
+        <div className="stat-card">
+          <div className="stat-label">Vendido hoy (pagado + entregado)</div>
+          <div className="stat-value">{formatMoney(stats.vendidoHoy)}</div>
+        </div>
+      </div>
+
+      <div className="vv-ultimos-dias">
+        <h3 className="vv-ultimos-dias-title">Vendido — últimos {DIAS_DESGLOSE} días</h3>
+        {ultimosDias.map((d) => (
+          <div className={`vv-dia-row${d.esHoy ? " vv-dia-hoy" : ""}`} key={d.iso}>
+            <span>{d.etiqueta}</span>
+            <span className="text-mono">{formatMoney(d.total)}</span>
+          </div>
+        ))}
       </div>
 
       <div className="vv-toolbar">
@@ -527,6 +731,12 @@ export default function VentasView() {
           <option value="">Todos los estados</option>
           {Object.keys(ESTADO_LABEL).map((e) => (
             <option key={e} value={e}>{ESTADO_LABEL[e]}</option>
+          ))}
+        </select>
+        <select className="field-select vv-select" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
+          <option value="">Todas las categorías</option>
+          {categoriasDisponibles.map((c) => (
+            <option key={c.id_categoria} value={c.id_categoria}>{c.nombre}</option>
           ))}
         </select>
         <input className="field-input vv-date" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} title="Desde" />
@@ -539,6 +749,7 @@ export default function VentasView() {
             <tr>
               <th>Venta</th>
               <th>Fecha</th>
+              <th>Categorías</th>
               {actorEsAdminGeneral(actor) && <th>Sucursal</th>}
               <th>Cajero</th>
               <th>Estado</th>
@@ -549,7 +760,7 @@ export default function VentasView() {
           <tbody>
             {cargando ? (
               <tr className="empty-row">
-                <td colSpan={7}>
+                <td colSpan={numColumnas}>
                   <div className="u-loading-row">
                     <Loader2 size={18} className="u-spin" /> Cargando ventas...
                   </div>
@@ -557,7 +768,7 @@ export default function VentasView() {
               </tr>
             ) : errorCarga ? (
               <tr className="empty-row">
-                <td colSpan={7}>
+                <td colSpan={numColumnas}>
                   <div className="alert alert-danger u-max-480">
                     <AlertTriangle size={16} className="u-icon-inline" />
                     <span>{errorCarga}</span>
@@ -566,7 +777,7 @@ export default function VentasView() {
               </tr>
             ) : visibles.length === 0 ? (
               <tr className="empty-row">
-                <td colSpan={7}>No hay ventas que coincidan con el filtro.</td>
+                <td colSpan={numColumnas}>No hay ventas que coincidan con el filtro.</td>
               </tr>
             ) : (
               visibles.map((v) => (
@@ -578,6 +789,17 @@ export default function VentasView() {
                     </div>
                   </td>
                   <td className="text-mono">{formatFecha(v.created_at)}</td>
+                  <td>
+                    {categoriasDeVenta(v).length === 0 ? (
+                      "—"
+                    ) : (
+                      <div className="vv-categorias-cell">
+                        {categoriasDeVenta(v).map((c) => (
+                          <span key={c.id_categoria} className="vv-categoria-chip">{c.nombre}</span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   {actorEsAdminGeneral(actor) && <td>{v.sucursal?.nombre ?? "—"}</td>}
                   <td>{v.cajero?.nombre ?? "—"}</td>
                   <td>

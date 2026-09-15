@@ -41,8 +41,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('me', [AuthController::class, 'me']);
 
     // Catálogos globales (no multi-tenant)
-    Route::apiResource('roles', RolController::class);
-    Route::apiResource('sucursales', SucursalController::class);
+    Route::apiResource('roles', RolController::class)
+    ->parameter('roles', 'rol');
+    Route::apiResource('sucursales', SucursalController::class)
+    ->parameter('sucursales', 'sucursal');
     // Mismo problema que categorias-productos: 'metodos-pago' termina en
     // 'o', así que Laravel ni siquiera intenta singularizarlo (su regla
     // genérica solo quita una 's' final) y el wildcard queda 'metodos_pago',

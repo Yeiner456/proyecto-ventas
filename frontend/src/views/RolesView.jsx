@@ -139,9 +139,9 @@ function RoleCard({ role, usuariosDelRol, onEdit, onDelete, onVerUsuarios }) {
           <Eye size={14} /> Ver usuarios
         </button>
         <button
-          className="btn btn-danger-ghost btn-sm"
-          onClick={() => onDelete(role)}
-          className="u-ml-auto"
+        
+        className="btn btn-danger-ghost btn-sm u-ml-auto"
+        onClick={() => onDelete(role)}
         >
           <Trash2 size={14} />
         </button>

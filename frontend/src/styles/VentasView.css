@@ -5,6 +5,14 @@
 .vv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
 .vv-subtitle { font-family: 'Roboto', sans-serif; font-size: 14px; color: var(--text-secondary); margin: 0; max-width: 620px; line-height: 1.5; }
 .vv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 20px; }
+
+/* Tarjeta "Vendido — últimos N días" (reemplaza a "Total vendido", que
+   sumaba todo el histórico visible sin límite de fecha) */
+.vv-ultimos-dias { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; }
+.vv-ultimos-dias-title { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; margin: 0 0 10px 0; }
+.vv-dia-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); font-family: 'Roboto', sans-serif; font-size: 13px; }
+.vv-dia-row:last-child { border-bottom: none; }
+.vv-dia-hoy { font-weight: 700; color: var(--sena-green-dark); }
 .vv-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
 .vv-select { max-width: 200px; }
 .vv-date { max-width: 160px; }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   FileSpreadsheet,
   FileText,
@@ -10,10 +10,17 @@ import {
   Lock,
   AlertTriangle,
   Loader2,
+  CalendarDays,
+  Tags,
 } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError } from "../services/apiClient";
-import { TIPOS_REPORTE, obtenerDatosReporte } from "../services/reportesService";
+import {
+  TIPOS_REPORTE,
+  obtenerDatosReporte,
+  calcularRangoFecha,
+  describirRangoFecha,
+} from "../services/reportesService";
 import { descargarExcel, descargarPDF, nombreArchivoConFecha } from "../utils/exportar";
 import "../styles/ReportesView.css";
 
@@ -35,9 +42,40 @@ import "../styles/ReportesView.css";
  * su sucursal ya viene fija desde el backend, aquí solo se muestra como
  * referencia (mismo patrón "uv-lock-note" que UsuariosView/ProductosView).
  *
+ * Filtro de fecha (agregado 2026-08-11): SOLO en la tarjeta de "Ventas"
+ * — es el único de los 4 reportes con una fecha de negocio relevante
+ * para filtrar (los otros 3 no la mostraban en sus columnas). Vive
+ * dentro de la propia tarjeta, no como filtro global, para no afectar
+ * a Productos/Usuarios/Inventario. "Última semana"/"último mes" son
+ * ventanas CORRIDAS de 7/30 días incluyendo hoy, no semana/mes
+ * calendario — ver calcularRangoFecha() en reportesService.js.
+ *
+ * Filtro de categoría (agregado 2026, extendido a "Productos" después):
+ * vive dentro de cada tarjeta que lo soporta ("Ventas" y "Productos"),
+ * y en la de Ventas se combina con el de fecha (una venta debe cumplir
+ * fecha Y categoría para exportarse). Las categorías disponibles salen
+ * de GET /api/categorias-productos, cargadas una sola vez al montar la
+ * vista, y esa LISTA de opciones es la misma para ambas tarjetas — pero
+ * la SELECCIÓN es independiente ('categoriaId' para Ventas,
+ * 'categoriaIdProductos' para Productos) para que descargar un reporte
+ * filtrado en una tarjeta no deje "pegado" ese mismo filtro en la otra
+ * sin que el usuario lo note.
+ *
+ * Para admin_general se filtran en el navegador por la sucursal elegida
+ * en el picker de arriba (mismo motivo que el picker de sucursal: ese
+ * endpoint le devuelve TODAS las categorías de TODAS las sucursales
+ * mezcladas) — por eso el selector de categoría está deshabilitado
+ * hasta que admin_general elige una sucursal. Para admin_sucursal el
+ * backend ya le devuelve solo las suyas, así que se usan directo.
+ * Cuando cambia la sucursal elegida se resetean AMBAS selecciones de
+ * categoría: una categoría de la sucursal anterior ya no tiene sentido
+ * (ni existe como <option>) en la nueva.
+ *
  * Generación de archivos: 100% en el navegador (ver utils/exportar.js).
  * Decisión tomada junto con el equipo el 2026-07-09: cero endpoints
- * nuevos en Laravel para esta funcionalidad.
+ * nuevos en Laravel para esta funcionalidad. Los filtros de fecha y
+ * categoría respetan esa misma decisión: se filtran en el navegador,
+ * igual que sucursal.
  * ==========================================================================*/
 
 const ICONO_POR_TIPO = {
@@ -46,6 +84,8 @@ const ICONO_POR_TIPO = {
   ventas: ShoppingCart,
   inventario: Boxes,
 };
+
+const HOY_ISO = new Date().toISOString().slice(0, 10);
 
 function puedeVer(actor) {
   return actorEsAdminGeneral(actor) || actor.rol === "admin_sucursal";
@@ -62,6 +102,21 @@ export default function ReportesView() {
 
   const [estadoBoton, setEstadoBoton] = useState({}); // { "productos-excel": true, ... }
   const [errorPorTipo, setErrorPorTipo] = useState({}); // { productos: "mensaje", ... }
+
+  // Filtro de fecha — solo se usa para la tarjeta de "ventas" (ver
+  // comentario de arriba). 'preset' controla qué controles se muestran.
+  const [presetFecha, setPresetFecha] = useState("todo"); // todo | semana | mes | especifica | rango
+  const [fechaEspecifica, setFechaEspecifica] = useState("");
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
+
+  // Filtro de categoría — selección independiente por tarjeta (ver nota
+  // de cabecera). Vacío = "todas".
+  const [categorias, setCategorias] = useState([]);
+  const [cargandoCategorias, setCargandoCategorias] = useState(true);
+  const [errorCategorias, setErrorCategorias] = useState(null);
+  const [categoriaId, setCategoriaId] = useState(""); // tarjeta "Ventas"
+  const [categoriaIdProductos, setCategoriaIdProductos] = useState(""); // tarjeta "Productos"
 
   // Solo admin_general necesita el selector; admin_sucursal ni siquiera
   // pide esta lista.
@@ -87,9 +142,73 @@ export default function ReportesView() {
     };
   }, [admin]);
 
+  // Categorías: se piden siempre (admin y no-admin las necesitan), una
+  // sola vez al montar. CategoriaProductoPolicy::viewAny() es true para
+  // cualquier rol, así que no hace falta ningún guard extra aquí.
+  useEffect(() => {
+    let activo = true;
+    setCargandoCategorias(true);
+    api
+      .getAllPages("/categorias-productos")
+      .then((data) => {
+        if (activo) setCategorias(data);
+      })
+      .catch((e) => {
+        if (!activo) return;
+        setErrorCategorias(e instanceof ApiError ? e.message : (e?.message ?? "No se pudieron cargar las categorías."));
+      })
+      .finally(() => activo && setCargandoCategorias(false));
+    return () => {
+      activo = false;
+    };
+  }, []);
+
   const sucursalSeleccionada = sucursales.find((s) => String(s.id_sucursal) === sucursalId);
   const nombreSucursalActual = admin ? sucursalSeleccionada?.nombre : actor.sucursal;
   const listoParaDescargar = admin ? Boolean(sucursalId) : true;
+
+  // admin_general: /api/categorias-productos trae TODAS las sucursales
+  // mezcladas, así que se filtra en el navegador por la sucursal elegida
+  // (igual que el picker de arriba). admin_sucursal: el backend ya le
+  // devuelve solo las suyas.
+  const categoriasDisponibles = useMemo(() => {
+    if (!admin) return categorias;
+    if (!sucursalId) return [];
+    return categorias.filter((c) => c.sucursal_id === Number(sucursalId));
+  }, [admin, categorias, sucursalId]);
+
+  // rangoFecha === null significa "todo en general" (sin filtro). Solo
+  // aplica a la tarjeta de Ventas (ver manejarDescarga y el render).
+  const rangoFecha = useMemo(() => {
+    if (presetFecha === "especifica") {
+      return calcularRangoFecha("especifica", { fecha: fechaEspecifica });
+    }
+    if (presetFecha === "rango") {
+      return calcularRangoFecha("rango", { desde: fechaDesde, hasta: fechaHasta });
+    }
+    if (presetFecha === "semana" || presetFecha === "mes") {
+      return calcularRangoFecha(presetFecha);
+    }
+    return null; // "todo"
+  }, [presetFecha, fechaEspecifica, fechaDesde, fechaHasta]);
+
+  // La selección de fecha está "incompleta" cuando el preset exige un
+  // dato que el usuario todavía no ha llenado (ej. eligió "Una fecha
+  // específica" pero no ha elegido el día todavía). Bloquea solo la
+  // descarga de Ventas, no las demás tarjetas.
+  const fechaVentasIncompleta =
+    (presetFecha === "especifica" && !fechaEspecifica) ||
+    (presetFecha === "rango" && (!fechaDesde || !fechaHasta));
+
+  function handleSucursalChange(value) {
+    setSucursalId(value);
+    // Una categoría de la sucursal anterior no tiene sentido (ni existe
+    // como <option>) en la nueva — se resetean AMBAS para no exportar
+    // con un filtro de categoría "fantasma" que el usuario ya no ve
+    // seleccionado en ninguna de las dos tarjetas.
+    setCategoriaId("");
+    setCategoriaIdProductos("");
+  }
 
   const manejarDescarga = useCallback(
     async (tipo, formato) => {
@@ -98,8 +217,14 @@ export default function ReportesView() {
       setErrorPorTipo((prev) => ({ ...prev, [tipo.id]: null }));
 
       try {
-        const filtro = admin ? Number(sucursalId) : null;
-        const filas = await obtenerDatosReporte(tipo, filtro);
+        const filtroSucursal = admin ? Number(sucursalId) : null;
+        const filtroFecha = tipo.id === "ventas" ? rangoFecha : null;
+        // Cada tarjeta lee su propia selección — ver nota de cabecera
+        // sobre por qué categoriaId/categoriaIdProductos están separados.
+        const categoriaIdParaTipo =
+          tipo.id === "ventas" ? categoriaId : tipo.id === "productos" ? categoriaIdProductos : "";
+        const filtroCategoria = categoriaIdParaTipo ? Number(categoriaIdParaTipo) : null;
+        const filas = await obtenerDatosReporte(tipo, filtroSucursal, filtroFecha, filtroCategoria);
 
         if (filas.length === 0) {
           setErrorPorTipo((prev) => ({
@@ -110,7 +235,18 @@ export default function ReportesView() {
         }
 
         const nombreBase = nombreArchivoConFecha(tipo.id, nombreSucursalActual);
-        const subtitulo = `Sucursal: ${nombreSucursalActual ?? "—"} · Generado el ${new Date().toLocaleDateString("es-CO")}`;
+        const descripcionFecha = tipo.id === "ventas" ? describirRangoFecha(presetFecha, filtroFecha) : null;
+        const categoriaSeleccionada =
+          filtroCategoria != null ? categoriasDisponibles.find((c) => c.id_categoria === filtroCategoria) : null;
+        const descripcionCategoria = categoriaSeleccionada ? `Categoría: ${categoriaSeleccionada.nombre}` : null;
+        const subtitulo = [
+          `Sucursal: ${nombreSucursalActual ?? "—"}`,
+          descripcionFecha,
+          descripcionCategoria,
+          `Generado el ${new Date().toLocaleDateString("es-CO")}`,
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
         if (formato === "excel") {
           descargarExcel({
@@ -137,7 +273,7 @@ export default function ReportesView() {
         setEstadoBoton((prev) => ({ ...prev, [clave]: false }));
       }
     },
-    [admin, sucursalId, nombreSucursalActual]
+    [admin, sucursalId, nombreSucursalActual, rangoFecha, presetFecha, categoriaId, categoriaIdProductos, categoriasDisponibles]
   );
 
   if (!puedeVer(actor)) {
@@ -183,7 +319,7 @@ export default function ReportesView() {
               id="rv-sucursal"
               className="field-select rv-select"
               value={sucursalId}
-              onChange={(e) => setSucursalId(e.target.value)}
+              onChange={(e) => handleSucursalChange(e.target.value)}
             >
               <option value="">Selecciona una sucursal...</option>
               {sucursales.map((s) => (
@@ -213,6 +349,13 @@ export default function ReportesView() {
           const cargandoExcel = estadoBoton[`${tipo.id}-excel`];
           const cargandoPDF = estadoBoton[`${tipo.id}-pdf`];
           const error = errorPorTipo[tipo.id];
+          const esVentas = tipo.id === "ventas";
+          const esProductos = tipo.id === "productos";
+          const bloqueadoPorFecha = esVentas && fechaVentasIncompleta;
+          // Filtro de fecha: SOLO Ventas (es el único con fecha de
+          // negocio relevante). Filtro de categoría: Ventas Y Productos.
+          const categoriaIdActual = esVentas ? categoriaId : categoriaIdProductos;
+          const setCategoriaIdActual = esVentas ? setCategoriaId : setCategoriaIdProductos;
 
           return (
             <div className="rv-card" key={tipo.id}>
@@ -221,6 +364,94 @@ export default function ReportesView() {
               </div>
               <h2 className="section-title rv-card-title">{tipo.titulo}</h2>
               <p className="text-muted rv-card-desc">{tipo.descripcion}</p>
+
+              {esVentas && (
+                <div className="rv-filtro-fecha">
+                  <label className="field-label rv-filtro-fecha-label" htmlFor="rv-preset-fecha">
+                    <CalendarDays size={13} className="u-icon-inline" />
+                    Filtrar por fecha
+                  </label>
+                  <select
+                    id="rv-preset-fecha"
+                    className="field-select rv-select-sm"
+                    value={presetFecha}
+                    onChange={(e) => setPresetFecha(e.target.value)}
+                  >
+                    <option value="todo">Todo en general</option>
+                    <option value="semana">Última semana</option>
+                    <option value="mes">Último mes</option>
+                    <option value="especifica">Una fecha específica</option>
+                    <option value="rango">Rango específico</option>
+                  </select>
+
+                  {presetFecha === "especifica" && (
+                    <input
+                      type="date"
+                      className="field-input rv-fecha-input"
+                      value={fechaEspecifica}
+                      max={HOY_ISO}
+                      onChange={(e) => setFechaEspecifica(e.target.value)}
+                    />
+                  )}
+
+                  {presetFecha === "rango" && (
+                    <div className="rv-fecha-rango">
+                      <input
+                        type="date"
+                        className="field-input rv-fecha-input"
+                        value={fechaDesde}
+                        max={fechaHasta || HOY_ISO}
+                        onChange={(e) => setFechaDesde(e.target.value)}
+                      />
+                      <span className="rv-fecha-rango-separador">a</span>
+                      <input
+                        type="date"
+                        className="field-input rv-fecha-input"
+                        value={fechaHasta}
+                        min={fechaDesde || undefined}
+                        max={HOY_ISO}
+                        onChange={(e) => setFechaHasta(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  {bloqueadoPorFecha && (
+                    <p className="field-help rv-fecha-help">
+                      {presetFecha === "especifica"
+                        ? "Elige una fecha para habilitar la descarga."
+                        : "Completa ambas fechas para habilitar la descarga."}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {(esVentas || esProductos) && (
+                <div className="rv-filtro-fecha">
+                  <label className="field-label rv-filtro-fecha-label" htmlFor={`rv-categoria-${tipo.id}`}>
+                    <Tags size={13} className="u-icon-inline" />
+                    Filtrar por categoría
+                  </label>
+                  <select
+                    id={`rv-categoria-${tipo.id}`}
+                    className="field-select rv-select-sm"
+                    value={categoriaIdActual}
+                    onChange={(e) => setCategoriaIdActual(e.target.value)}
+                    disabled={admin && !sucursalId}
+                  >
+                    <option value="">Todas las categorías</option>
+                    {categoriasDisponibles.map((c) => (
+                      <option key={c.id_categoria} value={c.id_categoria}>
+                        {c.nombre}
+                      </option>
+                    ))}
+                  </select>
+                  {admin && !sucursalId && (
+                    <p className="field-help">Elige una sucursal arriba para poder filtrar por categoría.</p>
+                  )}
+                  {cargandoCategorias && (!admin || sucursalId) && <p className="field-help">Cargando categorías...</p>}
+                  {errorCategorias && <p className="field-help">{errorCategorias}</p>}
+                </div>
+              )}
 
               {error && (
                 <div className="alert alert-danger rv-card-error">
@@ -232,7 +463,7 @@ export default function ReportesView() {
               <div className="rv-card-actions">
                 <button
                   className="btn btn-outline btn-sm"
-                  disabled={!listoParaDescargar || cargandoExcel}
+                  disabled={!listoParaDescargar || cargandoExcel || bloqueadoPorFecha}
                   onClick={() => manejarDescarga(tipo, "excel")}
                 >
                   {cargandoExcel ? <Loader2 size={14} className="rv-spin" /> : <FileSpreadsheet size={14} />}
@@ -240,7 +471,7 @@ export default function ReportesView() {
                 </button>
                 <button
                   className="btn btn-outline btn-sm"
-                  disabled={!listoParaDescargar || cargandoPDF}
+                  disabled={!listoParaDescargar || cargandoPDF || bloqueadoPorFecha}
                   onClick={() => manejarDescarga(tipo, "pdf")}
                 >
                   {cargandoPDF ? <Loader2 size={14} className="rv-spin" /> : <FileText size={14} />}
