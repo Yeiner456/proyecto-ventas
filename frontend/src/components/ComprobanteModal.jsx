@@ -6,11 +6,20 @@ import { Camera, Paperclip, RotateCcw, AlertTriangle, Loader2, CheckCircle2, X, 
  * comprobante (MetodoPago::requiere_comp, ej. Transferencia bancaria).
  * ----------------------------------------------------------------------------
  * Responsabilidad única: producir un File (foto tomada o archivo adjunto) y
- * entregarlo al padre vía onConfirmar(file). No conoce la API ni la venta —
+ * una referencia de pago (texto), y entregarlos al padre vía
+ * onConfirmar(file, referencia). No conoce la API ni la venta —
  * NuevaVentaView es quien sube el archivo a POST /api/comprobantes-pago y
- * luego cambia el estado de la venta a 'pagado'. Mismo patrón que
- * RestaurarModal en BackupsView.jsx: el hijo solo recoge input del usuario,
- * el padre orquesta las llamadas de red y pasa `subiendo`/`error` como props.
+ * luego cambia el estado de la venta a 'pagado' (mandando la referencia en
+ * ese mismo PATCH). Mismo patrón que RestaurarModal en BackupsView.jsx: el
+ * hijo solo recoge input del usuario, el padre orquesta las llamadas de red
+ * y pasa `subiendo`/`error` como props.
+ *
+ * REFERENCIA DE PAGO (agregado 2026): obligatoria SOLO acá — a nivel de
+ * base de datos la columna 'referencia_pago' es nullable (ver la
+ * migración), y el backend la acepta como opcional. La exigencia es
+ * puramente de este flujo: para efectivo (que no pasa por este modal, ver
+ * NuevaVentaView::cobrar()) no tiene sentido pedirla, un pago en efectivo
+ * no tiene número de referencia.
  *
  * Backend acepta jpg, jpeg, png o pdf, máx. 5MB (StoreComprobantePagoRequest).
  *
@@ -32,6 +41,9 @@ export default function ComprobanteModal({ ventaId, subiendo, error, onConfirmar
     const [archivo, setArchivo] = useState(null);
     const [previewUrl, setPreviewUrl] = useState(null);
     const [errorCamara, setErrorCamara] = useState(null);
+    const [referencia, setReferencia] = useState("");
+
+    const referenciaValida = referencia.trim().length > 0;
 
     const videoRef = useRef(null);
     const streamRef = useRef(null);
@@ -143,6 +155,21 @@ export default function ComprobanteModal({ ventaId, subiendo, error, onConfirmar
                     )}
                 </div>
 
+                <div className="field cm-referencia-field">
+                    <label className="field-label" htmlFor="cm-referencia">
+                        Referencia de pago <span className="cm-requerido">*</span>
+                    </label>
+                    <input
+                        id="cm-referencia"
+                        className="field-input"
+                        value={referencia}
+                        onChange={(e) => setReferencia(e.target.value)}
+                        placeholder="ej. número de comprobante o de transacción"
+                        disabled={subiendo}
+                        maxLength={100}
+                    />
+                </div>
+
                 {modo === "elegir" && (
                     <div className="cm-opciones">
                         <button className="cm-opcion-btn" onClick={abrirCamara}>
@@ -197,7 +224,12 @@ export default function ComprobanteModal({ ventaId, subiendo, error, onConfirmar
                             <button className="btn btn-outline" onClick={reintentar} disabled={subiendo}>
                                 <RotateCcw size={14} /> Elegir otro
                             </button>
-                            <button className="btn btn-primary" onClick={() => onConfirmar(archivo)} disabled={subiendo}>
+                            <button
+                                className="btn btn-primary"
+                                onClick={() => onConfirmar(archivo, referencia.trim())}
+                                disabled={subiendo || !referenciaValida}
+                                title={!referenciaValida ? "Escribe la referencia de pago para continuar" : undefined}
+                            >
                                 {subiendo ? (
                                     <>
                                         <Loader2 size={16} className="cm-spin" /> Finalizando...

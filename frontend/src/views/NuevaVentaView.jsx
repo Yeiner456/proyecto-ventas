@@ -46,6 +46,14 @@ import "../styles/NuevaVentaView.css";
  * before(), pero no tiene sucursal propia — no tendría sentido que operara
  * una caja — por eso esta vista se bloquea para admin_general).
  *
+ * REFERENCIA DE PAGO (agregado 2026): campo de texto que el cajero debe
+ * llenar en ComprobanteModal — solo aparece ahí, así que solo aplica a
+ * métodos de pago con requiere_comp (efectivo no lo pide, porque ese
+ * método ni siquiera pasa por este modal). Viaja en el mismo PATCH que
+ * confirma el pago (finalizarPago), no en un request aparte. A nivel de
+ * base de datos la columna es nullable — la obligatoriedad es una regla
+ * de este flujo puntual, no una restricción general de 'ventas'.
+ *
  * CATÁLOGO: productos, categorías y métodos de pago ya vienen de la API
  * real (GET /api/productos, /api/categorias-productos, /api/metodos-pago).
  * Para cajero/admin_sucursal, /api/productos y /api/categorias-productos
@@ -378,8 +386,11 @@ export default function NuevaVentaView() {
     }));
   }
 
-  async function finalizarPago(ventaId) {
-    const ventaPagada = await api.patch(`/ventas/${ventaId}/estado`, { estado: "pagado" });
+  async function finalizarPago(ventaId, referenciaPago = null) {
+    const ventaPagada = await api.patch(`/ventas/${ventaId}/estado`, {
+      estado: "pagado",
+      ...(referenciaPago ? { referencia_pago: referenciaPago } : {}),
+    });
     setFacturaGenerada(ventaPagada.factura);
     setVentaPendiente(null);
     setMostrarComprobante(false);
@@ -453,7 +464,7 @@ export default function NuevaVentaView() {
     }
   }
 
-  async function confirmarComprobante(archivo) {
+  async function confirmarComprobante(archivo, referencia) {
     if (!ventaPendiente) return;
     setSubiendoComprobante(true);
     setErrorComprobante(null);
@@ -464,8 +475,9 @@ export default function NuevaVentaView() {
       await api.uploadFile("/comprobantes-pago", formData);
 
       // Con el comprobante ya guardado, recién ahora se confirma el pago:
-      // descuenta stock y genera factura.
-      await finalizarPago(ventaPendiente.id_venta);
+      // descuenta stock, genera factura y guarda la referencia de pago
+      // que el cajero escribió en el modal.
+      await finalizarPago(ventaPendiente.id_venta, referencia);
     } catch (err) {
       setErrorComprobante(err instanceof ApiError ? err.message : "No se pudo subir el comprobante.");
     } finally {

@@ -26,6 +26,7 @@ class Venta extends Model
         'cajero_id',
         'estado',
         'metodo_pago_id',
+        'referencia_pago',
         'total',
         'observacion',
     ];

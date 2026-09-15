@@ -36,7 +36,18 @@ class VentaController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = Venta::query()->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto']);
+        // 'detalles.producto.categoria' (antes solo 'detalles.producto'):
+        // el listado de Ventas ahora muestra y filtra por las categorías
+        // de los productos de cada venta (ver VentasView.jsx).
+        // 'comprobantes' (agregado 2026): Reportes → Ventas y el botón
+        // "Exportar a Excel" de VentasView ahora incluyen una columna
+        // "Comprobante" (Sí/No) — sin esta relación cargada aquí, cada
+        // fila necesitaría su propio GET /api/ventas/{id} para saberlo
+        // (N+1), rompiendo la idea de "una sola pasada" que ya usan los
+        // reportes masivos. Es una relación liviana (0 o 1 fila típico
+        // por venta), mismo criterio que ya se usó para agregar
+        // detalles.producto.categoria.
+        $query = Venta::query()->with(['sucursal', 'cajero', 'metodoPago', 'detalles.producto.categoria', 'comprobantes']);
 
         $this->aplicarFiltroSucursal($query);
 
@@ -123,8 +134,11 @@ class VentaController extends Controller
     public function show(Venta $venta): JsonResponse
     {
         // Autorización de 'view' ya resuelta por authorizeResource().
+        // 'detalles.producto.categoria' agregado por el mismo motivo que
+        // en index(): el detalle de una venta también necesita mostrar
+        // la categoría de cada producto vendido.
         return response()->json($venta->load([
-            'sucursal', 'cajero', 'metodoPago', 'detalles.producto', 'comprobantes', 'factura',
+            'sucursal', 'cajero', 'metodoPago', 'detalles.producto.categoria', 'comprobantes', 'factura',
         ]));
     }
 
@@ -257,7 +271,15 @@ class VentaController extends Controller
                     }
                 }
 
-                $venta->update(['estado' => $estadoNuevo]);
+                // referencia_pago solo se manda al confirmar el pago de un
+                // método que la exige (ver ComprobanteModal) — en
+                // cualquier otra transición (cancelar, etc.) no viene en
+                // la petición, así que no se toca el valor ya guardado.
+                $datosActualizar = ['estado' => $estadoNuevo];
+                if ($request->filled('referencia_pago')) {
+                    $datosActualizar['referencia_pago'] = $request->input('referencia_pago');
+                }
+                $venta->update($datosActualizar);
             });
         } catch (ValidationException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);

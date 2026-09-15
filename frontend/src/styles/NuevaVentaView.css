@@ -338,6 +338,14 @@
     max-width: 420px;
 }
 
+.cm-referencia-field {
+    margin-top: 14px;
+}
+
+.cm-requerido {
+    color: var(--danger, #d64545);
+}
+
 .cm-opciones {
     display: flex;
     gap: 12px;
