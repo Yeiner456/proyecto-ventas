@@ -20,6 +20,7 @@
 .vv-detalle-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-family: 'Roboto', sans-serif; font-size: 13px; }
 .vv-detalle-row:last-child { border-bottom: none; }
 .vv-total-row { display: flex; justify-content: space-between; padding-top: 10px; margin-top: 4px; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 15px; }
+.vv-referencia-row { margin-top: 14px; }
 .vv-timeline { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 14px 0; }
 .vv-timeline-step { font-family: 'Roboto', sans-serif; font-size: 11.5px; padding: 4px 10px; border-radius: 999px; background: #F3F4F6; color: var(--text-secondary); }
 .vv-timeline-step.done { background: var(--green-soft); color: var(--sena-green-dark); }

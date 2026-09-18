@@ -473,6 +473,13 @@ function DetalleModal({ venta: ventaInicial, actor, onClose }) {
           </div>
         )}
 
+        {venta.metodo_pago?.requiere_comp && (
+          <div className="vv-referencia-row">
+            <div className="field-help">Referencia de pago</div>
+            <span className="text-mono">{venta.referencia_pago ?? "—"}</span>
+          </div>
+        )}
+
         {!cargando && venta.estado === "pendiente" && (actor.rol === "admin_sucursal" || actor.rol === "cajero" || actorEsAdminGeneral(actor)) && (
           <AdjuntarComprobante
             ventaId={venta.id_venta}
