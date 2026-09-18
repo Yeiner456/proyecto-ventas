@@ -604,7 +604,7 @@ export default function VentasView() {
   // "Categorías" esto estaba fijo en 7 para ambos casos — inofensivo
   // (colSpan de más no rompe nada) pero impreciso; se deja exacto ya
   // que se está tocando esta misma tabla.
-  const numColumnas = actorEsAdminGeneral(actor) ? 8 : 7;
+  const numColumnas = actorEsAdminGeneral(actor) ? 9 : 8;
 
   function showToast(msg) {
     setToast(msg);
@@ -761,6 +761,7 @@ export default function VentasView() {
               {actorEsAdminGeneral(actor) && <th>Sucursal</th>}
               <th>Cajero</th>
               <th>Estado</th>
+              <th>Referencia</th>
               <th>Total</th>
               <th></th>
             </tr>
@@ -813,6 +814,7 @@ export default function VentasView() {
                   <td>
                     <span className={`badge ${ESTADO_BADGE[v.estado]}`}>{ESTADO_LABEL[v.estado]}</span>
                   </td>
+                  <td className="text-mono">{v.referencia_pago ?? "—"}</td>
                   <td className="text-mono">{formatMoney(v.total)}</td>
                   <td>
                     <div className="vv-row-actions">
