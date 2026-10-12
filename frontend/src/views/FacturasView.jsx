@@ -3,6 +3,7 @@ import { FileText, Search, X, AlertTriangle, Download, Receipt, Loader2, Papercl
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError, comprobanteUrl } from "../services/apiClient";
 import { descargarFacturaPDF } from "../utils/exportar";
+import { esFacturaVigente, sumarFacturasVigentes } from "../utils/totales";
 import "../styles/FacturasView.css";
 
 /* ============================================================================
@@ -266,13 +267,19 @@ export default function FacturasView() {
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [facturas, actor, sucursales, busqueda, desde, hasta, cajeroFiltro, sucursalFiltro]); // ← NUEVO (2 deps agregadas)
 
+  // Las facturas de ventas CANCELADAS no cuentan (utils/totales.js): ni en el
+  // total, ni en la cantidad, ni en el ticket promedio — si no, el promedio
+  // dividiría un total sin canceladas entre una cantidad que sí las incluye.
+  // Siguen apareciendo en la tabla (marcadas) por trazabilidad.
   const stats = useMemo(() => {
     const base = facturas.filter((f) => facturaVisible(actor, f, sucursales));
-    const totalFacturado = base.reduce((sum, f) => sum + Number(f.total), 0);
+    const vigentes = base.filter(esFacturaVigente);
+    const totalFacturado = sumarFacturasVigentes(base);
     return {
-      cantidad: base.length,
+      cantidad: vigentes.length,
+      canceladas: base.length - vigentes.length,
       totalFacturado,
-      promedio: base.length ? totalFacturado / base.length : 0,
+      promedio: vigentes.length ? totalFacturado / vigentes.length : 0,
     };
   }, [facturas, actor, sucursales]);
 
@@ -305,6 +312,12 @@ export default function FacturasView() {
           <div className="stat-value">{formatMoney(Math.round(stats.promedio))}</div>
         </div>
       </div>
+      {stats.canceladas > 0 && (
+        <p className="field-help fv-nota-canceladas">
+          {stats.canceladas} {stats.canceladas === 1 ? "factura pertenece" : "facturas pertenecen"} a ventas canceladas: se
+          muestran en la tabla, pero no suman al total ni al promedio.
+        </p>
+      )}
 
       <div className="fv-toolbar">
         <div className="fv-search">
@@ -393,12 +406,13 @@ export default function FacturasView() {
                     <div className="fv-numero-cell">
                       <Receipt size={14} className="fv-numero-icon" />
                       <span className="text-mono">{f.numero_factura}</span>
+                      {!esFacturaVigente(f) && <span className="badge badge-danger">Venta cancelada</span>}
                     </div>
                   </td>
                   <td className="text-mono">{formatFecha(f.created_at)}</td>
                   {actorEsAdminGeneral(actor) && <td>{f.sucursal?.nombre ?? "—"}</td>}
                   <td>{f.cajero?.nombre ?? "—"}</td>
-                  <td className="text-mono">{formatMoney(f.total)}</td>
+                  <td className={`text-mono${!esFacturaVigente(f) ? " fv-total-cancelado" : ""}`}>{formatMoney(f.total)}</td>
                   <td>
                     <button className="btn btn-outline btn-sm" onClick={() => setSeleccionada(f)}>
                       <FileText size={14} /> Ver

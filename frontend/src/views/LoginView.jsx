@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, AlertTriangle, LogIn } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import Creditos from "../components/layout/Creditos";
 
 /* ============================================================================
  * LOGIN — POST /api/login
@@ -115,6 +116,8 @@ export default function LoginView() {
         <div className="login-help">
           <p>Si olvidaste la contraseña o el ID, consulta el manual de instalacion o consultalo con un adminstrador.</p>
         </div>
+
+        <Creditos variante="clara" detallado />
       </div>
     </div>
   );

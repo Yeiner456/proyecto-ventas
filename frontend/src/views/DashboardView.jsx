@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { TrendingUp, PackageX, Bell, Receipt, ArrowRight, ShoppingCart, Users, Loader2, AlertTriangle } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError } from "../services/apiClient";
+import { esFacturaVigente, sumarFacturasVigentes } from "../utils/totales";
 import "../styles/DashboardView.css";
 
 /* ============================================================================
@@ -68,6 +69,16 @@ import "../styles/DashboardView.css";
  *   'Ventas registradas' y 'En curso' NO cambiaron: siguen siendo
  *   conteos de estado/histórico, no montos de dinero, y no fueron parte
  *   de la queja reportada.
+ *
+ *   FACTURAS CANCELADAS (octubre 2026): el KPI y el desglose por sucursal
+ *   ya NO suman las facturas cuya venta fue cancelada. Una venta pagada
+ *   puede cancelarse después (se devuelve el stock) pero su factura queda
+ *   en la tabla 'facturas', que no tiene columna de estado — por eso se
+ *   descartan mirando 'factura.venta.estado' (GET /api/facturas ya carga
+ *   esa relación). Regla compartida en utils/totales.js. Ojo: este corte
+ *   es por fecha de la FACTURA (el día del pago), mientras que la tarjeta
+ *   de Ventas corta por fecha de creación de la venta; solo difieren para
+ *   ventas creadas un día y cobradas otro.
  *
  * "PRODUCTOS MÁS VENDIDOS" (agregado 2026):
  *   Tarjeta nueva, SOLO para cajero/admin_sucursal (admin_general no la
@@ -193,15 +204,21 @@ export default function DashboardView() {
     [facturas, hoy]
   );
 
-  const totalFacturadoHoy = facturasHoy.reduce((sum, f) => sum + Number(f.total), 0);
+  // Las facturas de ventas CANCELADAS no suman (utils/totales.js): una venta
+  // ya pagada puede cancelarse después y su factura queda en la tabla sin
+  // ninguna marca, así que se descarta mirando el estado de su venta.
+  const totalFacturadoHoy = sumarFacturasVigentes(facturasHoy);
 
   const ventasPorSucursal = useMemo(() => {
     if (!admin) return [];
     return sucursales.map((s) => ({
       sucursal: s.nombre,
-      total: facturasHoy.filter((f) => f.sucursal_id === s.id_sucursal).reduce((sum, f) => sum + Number(f.total), 0),
+      total: sumarFacturasVigentes(facturasHoy.filter((f) => f.sucursal_id === s.id_sucursal)),
     }));
   }, [admin, sucursales, facturasHoy]);
+
+  // Cuántas facturas de hoy quedaron fuera del total por estar canceladas.
+  const facturasHoyCanceladas = facturasHoy.filter((f) => !esFacturaVigente(f)).length;
 
   const ventasRecientes = [...ventas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
 
@@ -269,6 +286,11 @@ export default function DashboardView() {
         <div className="dv-kpi">
           <div className="dv-kpi-top"><span className="text-muted">Facturado hoy</span><div className="dv-kpi-icon"><Receipt size={16} /></div></div>
           <div className="stat-value">{formatMoney(totalFacturadoHoy)}</div>
+          {facturasHoyCanceladas > 0 && (
+            <div className="field-help">
+              No incluye {facturasHoyCanceladas} {facturasHoyCanceladas === 1 ? "factura cancelada" : "facturas canceladas"}
+            </div>
+          )}
         </div>
         <div className="dv-kpi">
           <div className="dv-kpi-top"><span className="text-muted">Stock bajo</span><div className="dv-kpi-icon"><PackageX size={16} /></div></div>

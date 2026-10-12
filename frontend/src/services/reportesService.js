@@ -1,4 +1,5 @@
 import { api } from "./apiClient";
+import { totalVentaParaExportar, pieTotalesVentas } from "../utils/totales";
 
 /* ============================================================================
  * reportesService.js — datos para la vista de Reportes/Exportación.
@@ -79,6 +80,15 @@ import { api } from "./apiClient";
  * individual de una factura (descargarFacturaPDF() en utils/exportar.js)
  * y por los modales de detalle — este reporte masivo solo indica
  * presencia/ausencia, igual que "Activo" en el reporte de productos.
+ *
+ * Total y filas de cierre en "ventas" (agregado 2026): la columna "Total"
+ * ahora es un NÚMERO (formato: "moneda") y queda EN BLANCO para ventas
+ * canceladas, de modo que nadie las sume por accidente. Al final del archivo
+ * se agrega "TOTAL VENDIDO" (solo pagado + entregado) — ver 'pie' en el tipo
+ * y utils/totales.js, que es la misma regla que usa la tarjeta de VentasView.
+ * ReportesView le pasa a descargarExcel/descargarPDF el resultado de
+ * tipo.pie(filas), calculado sobre las filas YA filtradas (sucursal, fecha,
+ * categoría): el total siempre corresponde a lo que contiene el archivo.
  *
  * Si en el futuro el volumen de datos crece y este "traer todo y filtrar
  * en el navegador" pesa demasiado, la mejora natural es agregar soporte a
@@ -221,8 +231,13 @@ export const TIPOS_REPORTE = [
       { header: "Método de pago", accessor: (f) => f.metodo_pago?.nombre ?? "—" },
       { header: "Referencia de pago", accessor: (f) => f.referencia_pago ?? "—" },
       { header: "Comprobante", accessor: (f) => ((f.comprobantes?.length ?? 0) > 0 ? "Sí" : "No") },
-      { header: "Total", accessor: (f) => formatoMoneda(f.total) },
+      // Número (no texto) para que Excel pueda sumar la columna, y en
+      // blanco si la venta está cancelada — ver utils/totales.js.
+      { header: "Total", formato: "moneda", accessor: totalVentaParaExportar },
     ],
+    // Filas de cierre del archivo: TOTAL VENDIDO (sin canceladas), etc.
+    // Misma función que usa la tarjeta de VentasView, así que cuadran.
+    pie: pieTotalesVentas,
   },
   {
     id: "inventario",

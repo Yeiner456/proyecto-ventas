@@ -3,6 +3,7 @@ import { Receipt, X, AlertTriangle, Info, ArrowRight, Ban, Trash2, ChevronRight,
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError, comprobanteUrl } from "../services/apiClient";
 import { descargarExcel, nombreArchivoConFecha } from "../utils/exportar";
+import { esVentaVendida, esVentaCancelada, resumenVentas, totalVentaParaExportar, pieTotalesVentas } from "../utils/totales";
 import "../styles/VentasView.css";
 
 /* ============================================================================
@@ -75,6 +76,22 @@ import "../styles/VentasView.css";
  * "Facturado hoy" ya resolvió en el Dashboard). El histórico completo
  * sigue disponible filtrando por fecha en esta misma tabla, o en
  * Reportes → Ventas.
+ *
+ * TOTAL DEL PERÍODO FILTRADO (octubre 2026): esa misma tarjeta ahora
+ * sigue a los filtros de fecha. Sin 'desde'/'hasta' muestra HOY (así el
+ * número nunca crece sin límite); si se elige un día, o un rango, muestra
+ * el total de ESE día/rango y su etiqueta lo dice ("Vendido el 17/09/2026").
+ * Antes, al elegir un día pasado la tarjeta decía "Vendido hoy: $0" aunque
+ * la tabla mostrara ventas. La fecha que se usa es la de creación de la
+ * venta — la misma que se ve en la columna "Fecha" y la que filtran
+ * 'desde'/'hasta' — para que el total cuadre con las filas de la tabla.
+ * (El Dashboard, en cambio, corta por la fecha de la FACTURA, que es la del
+ * pago: una venta creada ayer y cobrada hoy cuenta como "hoy" allá y como
+ * "ayer" aquí.)
+ *
+ * QUÉ SUMA: solo pagado + entregado. Las canceladas NUNCA suman. La regla
+ * vive en utils/totales.js y es la misma que usa el Excel de esta pantalla
+ * y el de Reportes → Ventas, así que los tres números coinciden.
  *
  * DESGLOSE "ÚLTIMOS 7 DÍAS" (agregado 2026): tarjeta nueva debajo de
  * las 4 de arriba, con el monto vendido (pagado+entregado) de cada uno
@@ -184,6 +201,13 @@ function fechaLocalISO(date) {
 
 function hoyLocalISO() {
   return fechaLocalISO(new Date());
+}
+
+// "2026-09-17" -> "17/09/2026". Se arma partiendo el texto a propósito: pasar
+// "YYYY-MM-DD" por new Date() lo interpreta como UTC y en Colombia (UTC-5)
+// mostraría el día anterior.
+function fechaCorta(iso) {
+  return iso.split("-").reverse().join("/");
 }
 
 function formatFecha(iso) {
@@ -560,26 +584,41 @@ export default function VentasView() {
   // fecha local, encima de cualquier filtro que ya esté activo.
   const stats = useMemo(() => {
     const hoy = hoyLocalISO();
-    const facturables = visibles.filter((v) => ["pagado", "entregado"].includes(v.estado));
     return {
       total: visibles.length,
       pendientes: visibles.filter((v) => !["pagado", "entregado", "cancelado"].includes(v.estado)).length,
       hoy: visibles.filter((v) => v.created_at?.slice(0, 10) === hoy).length,
-      vendidoHoy: facturables
-        .filter((v) => v.created_at?.slice(0, 10) === hoy)
-        .reduce((sum, v) => sum + Number(v.total), 0),
     };
   }, [visibles]);
+
+  // Total vendido del período que cubren los filtros de fecha.
+  //  - Sin 'desde' ni 'hasta' -> HOY (así el número no crece sin límite).
+  //  - Con fechas -> 'visibles' ya viene acotado por ellas, se suma tal cual:
+  //    un día elegido da el total de ese día, un rango da el del rango.
+  // Suma solo pagado + entregado; las canceladas no suman (utils/totales.js).
+  const totalPeriodo = useMemo(() => {
+    const sinFechas = !desde && !hasta;
+    const base = sinFechas ? visibles.filter((v) => v.created_at?.slice(0, 10) === hoyLocalISO()) : visibles;
+
+    let etiqueta;
+    if (sinFechas) etiqueta = "Vendido hoy";
+    else if (desde && hasta) {
+      etiqueta = desde === hasta ? `Vendido el ${fechaCorta(desde)}` : `Vendido del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`;
+    } else if (desde) etiqueta = `Vendido desde el ${fechaCorta(desde)}`;
+    else etiqueta = `Vendido hasta el ${fechaCorta(hasta)}`;
+
+    return { etiqueta, ...resumenVentas(base) };
+  }, [visibles, desde, hasta]);
 
   // Desglose de dinero vendido por día, para los últimos DIAS_DESGLOSE
   // días (incluyendo hoy) — reemplaza a "Total vendido", que sumaba
   // TODO el histórico visible sin límite de fecha y solo crecía con el
-  // tiempo. Mismo criterio que 'stats.vendidoHoy': solo pagado/entregado,
+  // tiempo. Mismo criterio que 'totalPeriodo': solo pagado/entregado,
   // sobre 'visibles' (ya filtrado por estado/categoría/fecha de esta
   // pantalla) — así que si filtras por categoría, el desglose también
   // se ajusta a esa categoría, igual que el resto de las tarjetas.
   const ultimosDias = useMemo(() => {
-    const facturables = visibles.filter((v) => ["pagado", "entregado"].includes(v.estado));
+    const facturables = visibles.filter(esVentaVendida);
     const hoyIso = hoyLocalISO();
     const dias = [];
     for (let i = DIAS_DESGLOSE - 1; i >= 0; i--) {
@@ -678,7 +717,8 @@ export default function VentasView() {
       // (VentaController::index) ahora lo trae eager-loaded — mismo
       // cambio de backend hecho para esta misma función en Reportes.
       { header: "Comprobante", accessor: (f) => ((f.comprobantes?.length ?? 0) > 0 ? "Sí" : "No") },
-      { header: "Total", accessor: (f) => formatMoney(f.total) },
+      // Número (para poder sumarlo en Excel); en blanco si está cancelada.
+      { header: "Total", formato: "moneda", accessor: totalVentaParaExportar },
     ];
 
     descargarExcel({
@@ -686,6 +726,9 @@ export default function VentasView() {
       hojaNombre: "Ventas",
       columnas,
       datos: visibles,
+      // TOTAL VENDIDO al final (sin canceladas). Se calcula sobre 'visibles'
+      // con la misma regla que la tarjeta de arriba.
+      pie: pieTotalesVentas(visibles),
     });
   }
 
@@ -719,8 +762,11 @@ export default function VentasView() {
           <div className="stat-value">{stats.hoy}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Vendido hoy (pagado + entregado)</div>
-          <div className="stat-value">{formatMoney(stats.vendidoHoy)}</div>
+          <div className="stat-label">{totalPeriodo.etiqueta} (pagado + entregado)</div>
+          <div className="stat-value">{formatMoney(totalPeriodo.vendido)}</div>
+          <div className="field-help">
+            {totalPeriodo.cantidadVendida} {totalPeriodo.cantidadVendida === 1 ? "venta" : "ventas"} · no incluye canceladas
+          </div>
         </div>
       </div>
 
@@ -815,7 +861,8 @@ export default function VentasView() {
                     <span className={`badge ${ESTADO_BADGE[v.estado]}`}>{ESTADO_LABEL[v.estado]}</span>
                   </td>
                   <td className="text-mono">{v.referencia_pago ?? "—"}</td>
-                  <td className="text-mono">{formatMoney(v.total)}</td>
+                  {/* Cancelada: el valor se ve tachado y atenuado para que quede claro que NO suma al total. */}
+                  <td className={`text-mono${esVentaCancelada(v) ? " vv-total-cancelado" : ""}`}>{formatMoney(v.total)}</td>
                   <td>
                     <div className="vv-row-actions">
                       <button className="btn btn-outline btn-sm" onClick={() => setDetalleVenta(v)}>

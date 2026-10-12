@@ -37,5 +37,8 @@
 .fv-comprobante-file { display: flex; align-items: center; gap: 6px; }
 
 /* Celda de N° de factura en la tabla (ícono + texto mono) */
-.fv-numero-cell { display: flex; align-items: center; gap: 8px; }
+.fv-numero-cell { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Factura de una venta cancelada: se ve, pero claramente fuera de los totales */
+.fv-total-cancelado { text-decoration: line-through; color: var(--text-secondary); opacity: .65; }
+.fv-nota-canceladas { margin: -8px 0 16px 0; }
 .fv-numero-icon { color: var(--sena-green-dark); }

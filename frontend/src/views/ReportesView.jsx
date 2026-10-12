@@ -248,12 +248,17 @@ export default function ReportesView() {
           .filter(Boolean)
           .join(" · ");
 
+        // Filas de cierre (ej. TOTAL VENDIDO en Ventas), calculadas sobre
+        // las filas YA filtradas. Los tipos sin 'pie' no agregan nada.
+        const pie = tipo.pie ? tipo.pie(filas) : undefined;
+
         if (formato === "excel") {
           descargarExcel({
             nombreArchivo: `${nombreBase}.xlsx`,
             hojaNombre: tipo.titulo,
             columnas: tipo.columnas,
             datos: filas,
+            pie,
           });
         } else {
           descargarPDF({
@@ -262,6 +267,7 @@ export default function ReportesView() {
             subtitulo,
             columnas: tipo.columnas,
             datos: filas,
+            pie,
           });
         }
       } catch (e) {

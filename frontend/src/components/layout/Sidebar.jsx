@@ -16,6 +16,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAuth, esAdminGeneral } from "../../context/AuthContext";
+import Creditos from "./Creditos";
 import { /* ...los que ya tienes... */ FileBarChart } from "lucide-react";
 
 
@@ -138,6 +139,8 @@ export default function Sidebar() {
           <LogOut size={16} />
         </button>
       </div>
+
+      <Creditos variante="oscura" />
     </aside>
   );
 }
