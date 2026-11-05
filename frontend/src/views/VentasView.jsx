@@ -77,6 +77,13 @@ import "../styles/VentasView.css";
  * sigue disponible filtrando por fecha en esta misma tabla, o en
  * Reportes → Ventas.
  *
+ * TARJETA "VENTAS" SOLO CON FILTROS (noviembre 2026): el total de ventas
+ * (conteo de filas) ya no se muestra por defecto; aparece únicamente
+ * cuando hay algún filtro activo (estado, categoría o fechas) y cuenta
+ * lo que esos filtros dejan ver. Sin filtros se oculta: es el conteo de
+ * todo el historial y no aporta. "En curso", "Ventas de hoy" y el vendido
+ * del período no cambian.
+ *
  * TOTAL DEL PERÍODO FILTRADO (octubre 2026): esa misma tarjeta ahora
  * sigue a los filtros de fecha. Sin 'desde'/'hasta' muestra HOY (así el
  * número nunca crece sin límite); si se elige un día, o un rango, muestra
@@ -591,6 +598,11 @@ export default function VentasView() {
     };
   }, [visibles]);
 
+  // La tarjeta "Ventas" (total de ventas) solo se muestra cuando hay al
+  // menos un filtro aplicado: sin filtros sería el conteo de todo el
+  // historial, que no aporta nada y crece sin parar.
+  const hayFiltros = Boolean(filtroEstado || filtroCategoria || desde || hasta);
+
   // Total vendido del período que cubren los filtros de fecha.
   //  - Sin 'desde' ni 'hasta' -> HOY (así el número no crece sin límite).
   //  - Con fechas -> 'visibles' ya viene acotado por ellas, se suma tal cual:
@@ -749,10 +761,12 @@ export default function VentasView() {
       </div>
 
       <div className="vv-stats">
-        <div className="stat-card">
-          <div className="stat-label">Ventas</div>
-          <div className="stat-value">{stats.total}</div>
-        </div>
+        {hayFiltros && (
+          <div className="stat-card">
+            <div className="stat-label">Ventas (con los filtros aplicados)</div>
+            <div className="stat-value">{stats.total}</div>
+          </div>
+        )}
         <div className="stat-card">
           <div className="stat-label">En curso</div>
           <div className={`stat-value${stats.pendientes > 0 ? " u-value-warning" : ""}`}>{stats.pendientes}</div>

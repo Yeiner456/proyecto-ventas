@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { TrendingUp, PackageX, Bell, Receipt, ArrowRight, ShoppingCart, Users, Loader2, AlertTriangle } from "lucide-react";
 import { useAuth, esAdminGeneral as actorEsAdminGeneral } from "../context/AuthContext";
 import { api, ApiError } from "../services/apiClient";
-import { esFacturaVigente, sumarFacturasVigentes } from "../utils/totales";
+import { ESTADOS_EN_CURSO, esFacturaVigente, sumarFacturasVigentes } from "../utils/totales";
 import "../styles/DashboardView.css";
 
 /* ============================================================================
@@ -15,14 +15,29 @@ import "../styles/DashboardView.css";
  * FRONTEND armar el resumen, no algo que el backend calcule y entregue
  * hecho.
  *
- * Implicación de rendimiento: son 5 requests solo para pintar el
- * dashboard. Con pocos usuarios no importa; si llega a pesar, la
- * solución NO es crear más lógica en el frontend sino pedirle al equipo
- * de backend un endpoint de agregación (GET /api/dashboard/resumen) que
- * haga las sumas en SQL en vez de traer todas las filas y sumarlas en
- * el navegador. Lo señalo ahora para que no se sorprendan si el
- * dashboard se siente pesado más adelante — no es un bug, es una
- * decisión pendiente de escala.
+ * CARGA OPTIMIZADA (noviembre 2026): antes el Dashboard descargaba TODO el
+ * historial de ventas (con detalles, productos, categorías y comprobantes)
+ * y de facturas, de 200 en 200 y una página tras otra — cada día que pasaba
+ * era más lento. Ahora pide solo lo que pinta, usando filtros que el
+ * backend YA acepta (cero endpoints nuevos, cero cambios en Laravel):
+ *   - 'En curso': 3 requests con ?estado=...&per_page=1 y se lee el 'total'
+ *     del paginador (no se descarga ninguna venta, solo se cuenta).
+ *   - 'Ventas recientes': ?per_page=5 (una sola página de 5 filas).
+ *   - 'Facturado hoy' y total por sucursal: facturas con ?desde=ayer&hasta=
+ *     mañana. El día exacto se sigue cortando en el navegador (ver nota de
+ *     "hoy" más abajo); el margen de ±1 día existe porque el backend corta
+ *     en UTC y el navegador en hora local, y así el número no cambia.
+ *   - 'Productos más vendidos': solo ventas de la última semana (y solo
+ *     para cajero/admin_sucursal, que son quienes ven esa tarjeta).
+ *   - Notificaciones: ?solo_no_leidas=1 (la pantalla ya descartaba las leídas).
+ *   - Sucursales: solo las pide admin_general (única vista que las usa).
+ * Se QUITÓ la tarjeta "Ventas registradas" (total histórico de ventas):
+ * para contarlas había que descargarlas todas. El total sigue disponible
+ * en Ventas (con filtros) y en Reportes.
+ *
+ * Si el volumen sigue creciendo, el siguiente paso NO es más lógica en el
+ * frontend sino un endpoint de agregación (GET /api/dashboard/resumen) que
+ * haga las sumas en SQL. Decisión pendiente de escala, no un bug.
  *
  * ventas/facturas/productos ya llegan filtrados por sucursal para
  * cualquiera que no sea admin_general (FiltraPorSucursal en el
@@ -50,12 +65,10 @@ import "../styles/DashboardView.css";
  *   completo sigue disponible en Reportes → Ventas, que es su lugar
  *   natural — no se duplica aquí a propósito.
  *
- *   No se agregó ningún query param ni endpoint nuevo al backend:
- *   'facturas' ya se trae completo (getAllPages) y el corte por día se
- *   hace en memoria con useMemo, igual que el filtro de fecha de
- *   Reportes → Ventas (ver reportesService.js). Si el volumen de
- *   facturas crece mucho, esto entra en la misma nota de rendimiento
- *   de más arriba.
+ *   El corte exacto por día se hace en memoria con useMemo, igual que el
+ *   filtro de fecha de Reportes → Ventas (ver reportesService.js). Al
+ *   backend solo se le pide una ventana de pocos días (ver "CARGA
+ *   OPTIMIZADA" arriba), no el historial completo.
  *
  *   "Hoy" se calcula con la fecha LOCAL del navegador (hoyLocalISO(),
  *   NO toISOString() — que convierte a UTC y podría desfasar el corte
@@ -66,9 +79,8 @@ import "../styles/DashboardView.css";
  *   Dashboard para que el corte quede en el día correcto — no hace
  *   falta polling ni auto-refresco (decisión explícita del equipo).
  *
- *   'Ventas registradas' y 'En curso' NO cambiaron: siguen siendo
- *   conteos de estado/histórico, no montos de dinero, y no fueron parte
- *   de la queja reportada.
+ *   'En curso' sigue siendo un conteo por estado (no un monto), con el
+ *   mismo resultado de antes aunque ahora se obtenga sin descargar ventas.
  *
  *   FACTURAS CANCELADAS (octubre 2026): el KPI y el desglose por sucursal
  *   ya NO suman las facturas cuya venta fue cancelada. Una venta pagada
@@ -88,14 +100,12 @@ import "../styles/DashboardView.css";
  *   (mismo criterio que 'vendido' en VentasView: una venta cancelada o
  *   todavía pendiente no cuenta como "vendida").
  *
- *   Cero requests nuevos: 'ventas' ya se trae completo con
- *   'detalles.producto.categoria' anidado (mismo GET /api/ventas que ya
- *   usa esta pantalla), así que el conteo por producto se arma 100% en
- *   memoria con un useMemo, igual que el resto del Dashboard. Para
+ *   Usa GET /api/ventas con 'detalles.producto.categoria' anidado, pedido
+ *   solo desde el inicio de la ventana (?desde=...) y solo si !admin; el
+ *   conteo por producto se arma en memoria con un useMemo. Para
  *   cajero/admin_sucursal 'ventas' ya llega scoped a su propia sucursal
  *   (FiltraPorSucursal), así que no hace falta ninguna lógica de rol
- *   para el scoping de los datos — solo la condición de UI (!admin)
- *   para decidir si se muestra la tarjeta.
+ *   para el scoping de los datos.
  * ==========================================================================*/
 
 function formatMoney(n) {
@@ -111,12 +121,22 @@ function formatFecha(iso) {
 // OJO: no usar new Date().toISOString().slice(0,10) acá, porque
 // convierte a UTC y cerca de medianoche podría marcar el día
 // equivocado según la zona horaria del navegador.
-function hoyLocalISO() {
-  const ahora = new Date();
-  const anio = ahora.getFullYear();
-  const mes = String(ahora.getMonth() + 1).padStart(2, "0");
-  const dia = String(ahora.getDate()).padStart(2, "0");
+function fechaLocalISO(fecha) {
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
   return `${anio}-${mes}-${dia}`;
+}
+
+function hoyLocalISO() {
+  return fechaLocalISO(new Date());
+}
+
+// Fecha local de "hoy" desplazada 'dias' días (negativo = pasado).
+function diaLocalISO(dias) {
+  const fecha = new Date();
+  fecha.setDate(fecha.getDate() + dias);
+  return fechaLocalISO(fecha);
 }
 
 const ESTADO_LABEL = {
@@ -142,7 +162,12 @@ export default function DashboardView() {
   const navigate = useNavigate();
   const admin = actorEsAdminGeneral(actor);
 
-  const [ventas, setVentas] = useState([]);
+  // 'ventasRecientes' (las 5 últimas), 'ventasSemana' (solo para el ranking
+  // de productos) y 'cantidadEnCurso' (solo un número): ya no se guarda el
+  // historial completo de ventas. Ver "CARGA OPTIMIZADA" en la cabecera.
+  const [ventasRecientes, setVentasRecientes] = useState([]);
+  const [ventasSemana, setVentasSemana] = useState([]);
+  const [cantidadEnCurso, setCantidadEnCurso] = useState(0);
   const [facturas, setFacturas] = useState([]);
   const [productos, setProductos] = useState([]);
   const [notificaciones, setNotificaciones] = useState([]);
@@ -154,14 +179,35 @@ export default function DashboardView() {
     setCargando(true);
     setErrorCarga(null);
     try {
-      const [ventasData, facturasData, productosData, notificacionesData, sucursalesData] = await Promise.all([
-        api.getAllPages("/ventas"),
-        api.getAllPages("/facturas"),
+      // Ventana del ranking: el corte exacto (hoy - 6 días a las 00:00 local)
+      // se aplica en memoria; el backend recibe un día extra de margen
+      // porque filtra por fecha UTC y el navegador por hora local.
+      const desdeRanking = diaLocalISO(-DIAS_RANKING_PRODUCTOS);
+
+      const [
+        recientesResp,
+        ventasSemanaData,
+        enCursoResps,
+        facturasData,
+        productosData,
+        notificacionesData,
+        sucursalesData,
+      ] = await Promise.all([
+        api.get("/ventas?per_page=5"),
+        // admin_general no ve "Productos más vendidos": no se pide nada.
+        admin ? Promise.resolve([]) : api.getAllPages(`/ventas?desde=${desdeRanking}`),
+        // Solo el 'total' del paginador: por_page=1 evita descargar ventas.
+        Promise.all(ESTADOS_EN_CURSO.map((estado) => api.get(`/ventas?estado=${estado}&per_page=1`))),
+        api.getAllPages(`/facturas?desde=${diaLocalISO(-1)}&hasta=${diaLocalISO(1)}`),
         api.getAllPages("/productos"),
-        api.getAllPages("/notificaciones"),
-        api.getAllPages("/sucursales"),
+        api.getAllPages("/notificaciones?solo_no_leidas=1"),
+        // Solo admin_general usa el desglose por sucursal.
+        admin ? api.getAllPages("/sucursales") : Promise.resolve([]),
       ]);
-      setVentas(ventasData);
+
+      setVentasRecientes(recientesResp.data ?? []);
+      setVentasSemana(ventasSemanaData);
+      setCantidadEnCurso(enCursoResps.reduce((suma, r) => suma + (r.total ?? 0), 0));
       setFacturas(facturasData);
       setProductos(productosData);
       setNotificaciones(notificacionesData);
@@ -171,7 +217,7 @@ export default function DashboardView() {
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [admin]);
 
   useEffect(() => {
     cargarDatos();
@@ -192,8 +238,6 @@ export default function DashboardView() {
       return n.usuario_id === actor.id_usuario;
     });
   }, [notificaciones, admin, actor]);
-
-  const enCurso = ventas.filter((v) => !["pagado", "entregado", "cancelado"].includes(v.estado));
 
   // Se recalcula en cada render/montaje, así que al abrir el Dashboard
   // un día distinto el corte cae automáticamente en la fecha nueva.
@@ -220,13 +264,11 @@ export default function DashboardView() {
   // Cuántas facturas de hoy quedaron fuera del total por estar canceladas.
   const facturasHoyCanceladas = facturasHoy.filter((f) => !esFacturaVigente(f)).length;
 
-  const ventasRecientes = [...ventas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
-
   // Ranking de productos por unidades vendidas en los últimos
   // DIAS_RANKING_PRODUCTOS días. Solo cuenta ventas 'pagado'/'entregado'
   // — una venta pendiente o cancelada no representa unidades realmente
-  // vendidas. 'ventas' ya trae 'detalles.producto' anidado, así que no
-  // hace falta ningún request adicional (ver nota de cabecera).
+  // vendidas. 'ventasSemana' ya trae 'detalles.producto' anidado, así que
+  // no hace falta ningún request adicional (ver nota de cabecera).
   const productosMasVendidos = useMemo(() => {
     const corte = new Date();
     corte.setDate(corte.getDate() - (DIAS_RANKING_PRODUCTOS - 1));
@@ -234,7 +276,7 @@ export default function DashboardView() {
 
     const conteo = new Map(); // id_producto -> { id_producto, nombre, cantidad }
 
-    ventas
+    ventasSemana
       .filter((v) => ["pagado", "entregado"].includes(v.estado))
       .filter((v) => new Date(v.created_at) >= corte)
       .forEach((v) => {
@@ -248,7 +290,7 @@ export default function DashboardView() {
       });
 
     return [...conteo.values()].sort((a, b) => b.cantidad - a.cantidad).slice(0, TOP_PRODUCTOS);
-  }, [ventas]);
+  }, [ventasSemana]);
 
   return (
     <div>
@@ -276,12 +318,8 @@ export default function DashboardView() {
       {/* KPIs */}
       <div className="dv-kpis">
         <div className="dv-kpi">
-          <div className="dv-kpi-top"><span className="text-muted">Ventas registradas</span><div className="dv-kpi-icon"><ShoppingCart size={16} /></div></div>
-          <div className="stat-value">{ventas.length}</div>
-        </div>
-        <div className="dv-kpi">
           <div className="dv-kpi-top"><span className="text-muted">En curso</span><div className="dv-kpi-icon"><TrendingUp size={16} /></div></div>
-          <div className={`stat-value${enCurso.length > 0 ? " u-value-warning" : ""}`}>{enCurso.length}</div>
+          <div className={`stat-value${cantidadEnCurso > 0 ? " u-value-warning" : ""}`}>{cantidadEnCurso}</div>
         </div>
         <div className="dv-kpi">
           <div className="dv-kpi-top"><span className="text-muted">Facturado hoy</span><div className="dv-kpi-icon"><Receipt size={16} /></div></div>

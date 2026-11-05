@@ -26,19 +26,90 @@ const WHITE = [255, 255, 255]; // #FFFFFF
 const TEXT_SECONDARY = [107, 114, 128]; // #6B7280
 const ROW_ALT = [245, 245, 245]; // #F5F5F5
 
-function filasAMatriz(datos, columnas) {
-  return datos.map((fila) => columnas.map((col) => col.accessor(fila) ?? "—"));
+/* ----------------------------------------------------------------------------
+ * COLUMNAS DE MONEDA Y FILAS DE CIERRE (agregado 2026)
+ *
+ * Una columna puede declarar `formato: "moneda"`. Su accessor debe devolver
+ * un NÚMERO (o "" para dejar la celda en blanco, ej. ventas canceladas):
+ *   - En Excel la celda queda como número real con formato de moneda, así que
+ *     el usuario puede seleccionar la columna y ver la suma en Excel para
+ *     comprobar que cuadra con la fila de total.
+ *   - En PDF se muestra ya formateada ("$38.000"), igual que antes.
+ *
+ * `pie` son filas que se agregan al final, tras una fila en blanco:
+ *   [{ etiqueta: string, valor?: number }]
+ * La etiqueta va en la primera columna y el valor en la columna de moneda
+ * (si no hay ninguna, en la última). Sin `valor`, la fila es solo una nota.
+ * Suponen una tabla de 2 o más columnas.
+ * -------------------------------------------------------------------------- */
+const FORMATO_MONEDA_EXCEL = '"$"#,##0';
+
+function formatoMonedaTexto(n) {
+  return `$${Number(n).toLocaleString("es-CO")}`;
+}
+
+function indiceColumnaDestinoPie(columnas) {
+  const idx = columnas.findIndex((c) => c.formato === "moneda");
+  return idx > 0 ? idx : columnas.length - 1;
+}
+
+function filasAMatriz(datos, columnas, { paraPDF = false } = {}) {
+  return datos.map((fila) =>
+    columnas.map((col) => {
+      const valor = col.accessor(fila) ?? "—";
+      // "" (celda en blanco a propósito) y textos pasan tal cual.
+      if (paraPDF && col.formato === "moneda" && typeof valor === "number") return formatoMonedaTexto(valor);
+      return valor;
+    })
+  );
+}
+
+// Filas de cierre para Excel. null = celda realmente vacía (no cadena ""),
+// así el texto largo de la etiqueta se desborda hacia las celdas vecinas.
+function filasPieExcel(pie, columnas) {
+  const destino = indiceColumnaDestinoPie(columnas);
+  return pie.map((p) => {
+    const fila = columnas.map(() => null);
+    fila[0] = p.etiqueta;
+    if (p.valor !== undefined) fila[destino] = p.valor;
+    return fila;
+  });
+}
+
+// Filas de cierre para PDF (autoTable `foot`): la etiqueta ocupa todas las
+// columnas hasta la de moneda, y el valor cae justo debajo de ella.
+function filasPiePDF(pie, columnas) {
+  const destino = indiceColumnaDestinoPie(columnas);
+  return pie.map((p) => {
+    const celdas = [{ content: p.etiqueta, colSpan: destino, styles: { halign: "left" } }];
+    celdas.push(p.valor !== undefined ? formatoMonedaTexto(p.valor) : "");
+    for (let i = destino + 1; i < columnas.length; i++) celdas.push("");
+    return celdas;
+  });
 }
 
 /**
- * @param columnas [{ header: string, accessor: (fila) => valor }]
+ * @param columnas [{ header: string, accessor: (fila) => valor, formato?: "moneda" }]
+ * @param pie      [{ etiqueta: string, valor?: number }] filas de cierre (opcional)
  */
-export function descargarExcel({ nombreArchivo, hojaNombre = "Datos", columnas, datos }) {
+export function descargarExcel({ nombreArchivo, hojaNombre = "Datos", columnas, datos, pie }) {
   const encabezados = columnas.map((c) => c.header);
   const cuerpo = filasAMatriz(datos, columnas);
+  const cierre = pie?.length ? [columnas.map(() => null), ...filasPieExcel(pie, columnas)] : [];
+  const matriz = [encabezados, ...cuerpo, ...cierre];
 
-  const hoja = XLSX.utils.aoa_to_sheet([encabezados, ...cuerpo]);
+  const hoja = XLSX.utils.aoa_to_sheet(matriz);
   hoja["!cols"] = columnas.map(() => ({ wch: 20 }));
+
+  // Formato de moneda en las celdas numéricas de las columnas de moneda
+  // (cuerpo y fila de total). Fila 0 es el encabezado.
+  columnas.forEach((col, c) => {
+    if (col.formato !== "moneda") return;
+    for (let r = 1; r < matriz.length; r++) {
+      const celda = hoja[XLSX.utils.encode_cell({ r, c })];
+      if (celda && celda.t === "n") celda.z = FORMATO_MONEDA_EXCEL;
+    }
+  });
 
   const libro = XLSX.utils.book_new();
   // Excel limita el nombre de hoja a 31 caracteres.
@@ -47,7 +118,7 @@ export function descargarExcel({ nombreArchivo, hojaNombre = "Datos", columnas, 
   XLSX.writeFile(libro, nombreArchivo);
 }
 
-export function descargarPDF({ nombreArchivo, titulo, subtitulo, columnas, datos }) {
+export function descargarPDF({ nombreArchivo, titulo, subtitulo, columnas, datos, pie }) {
   // Más de 5 columnas ya no cabe cómodo en vertical.
   const doc = new jsPDF({ orientation: columnas.length > 5 ? "landscape" : "portrait" });
 
@@ -68,7 +139,15 @@ export function descargarPDF({ nombreArchivo, titulo, subtitulo, columnas, datos
   autoTable(doc, {
     startY,
     head: [columnas.map((c) => c.header)],
-    body: filasAMatriz(datos, columnas),
+    body: filasAMatriz(datos, columnas, { paraPDF: true }),
+    // Filas de cierre (totales) solo al final de la tabla, no en cada página.
+    ...(pie?.length
+      ? {
+          foot: filasPiePDF(pie, columnas),
+          showFoot: "lastPage",
+          footStyles: { fillColor: ROW_ALT, textColor: INK, fontStyle: "bold" },
+        }
+      : {}),
     headStyles: { fillColor: SENA_GREEN, textColor: WHITE, fontStyle: "bold" },
     styles: { fontSize: 9, textColor: INK },
     alternateRowStyles: { fillColor: ROW_ALT },
